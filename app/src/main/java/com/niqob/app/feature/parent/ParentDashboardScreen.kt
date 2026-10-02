@@ -247,7 +247,11 @@ fun ParentDashboardScreen(
                     )
                     StatRowItem(
                         label = "Screen Time",
-                        value = "${status.screenTimeMinutes} min",
+                        value = if (uiState.isScreenTimeEnabled) {
+                            "${uiState.screenTimeLimitMinutes} min"
+                        } else {
+                            "Disabled"
+                        },
                         icon = Icons.Default.HourglassTop
                     )
                     HorizontalDivider(
@@ -312,6 +316,26 @@ fun ParentDashboardScreen(
                         }
                     }
                 }
+            }
+
+            // Screen Time Card
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Screen Time Management",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            item {
+                ParentScreenTimeCard(
+                    uiState = uiState,
+                    onPresetSelected = { viewModel.updateScreenTimeMinutes(it) },
+                    onCustomMinutesChanged = { viewModel.updateScreenTimeMinutes(it) },
+                    onToggleEnabled = { viewModel.toggleScreenTimeEnabled(it) },
+                    onSave = { viewModel.saveScreenTimeLimit() }
+                )
             }
 
             item {

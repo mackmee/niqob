@@ -7,25 +7,34 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.niqob.app.core.ui.components.NiqobCard
 import com.niqob.app.core.ui.components.NiqobTopAppBar
+import com.niqob.app.feature.parent.ParentDashboardViewModel
+import com.niqob.app.feature.parent.ParentScreenTimeCard
 
 @Composable
 fun ScreenTimeScreen(
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: ParentDashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshDashboard()
+    }
+
     Scaffold(
         topBar = {
             NiqobTopAppBar(
@@ -41,35 +50,33 @@ fun ScreenTimeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            ParentScreenTimeCard(
+                uiState = uiState,
+                onPresetSelected = { viewModel.updateScreenTimeMinutes(it) },
+                onCustomMinutesChanged = { viewModel.updateScreenTimeMinutes(it) },
+                onToggleEnabled = { viewModel.toggleScreenTimeEnabled(it) },
+                onSave = { viewModel.saveScreenTimeLimit() }
+            )
+
             NiqobCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.HourglassBottom,
-                        contentDescription = "Screen Time",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.height(72.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        text = "Screen Time Management",
-                        style = MaterialTheme.typography.titleLarge
+                        text = "About Screen Time Limits",
+                        style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Configure daily digital limits, set study downtime schedules, and monitor hourly app usage trends.",
+                        text = "When enabled, the child device will adhere to the daily screen time quota. Daily limits reset automatically each midnight according to the child's local device timezone.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
     }
 }
+
