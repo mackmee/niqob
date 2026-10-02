@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- NIQOB Shield Foreground -->
+    <path
+        android:fillColor="@color/primary_brand"
+        android:pathData="M54,22 L80,33 L80,56 C80,72 69,84 54,88 C39,84 28,72 28,56 L28,33 Z"/>
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M54,28 L74,37 L74,56 C74,68 66,78 54,82 C42,78 34,68 34,56 L34,37 Z"/>
+    <path
+        android:fillColor="@color/primary_brand"
+        android:pathData="M54,36 L68,43 L68,56 C68,64 62,71 54,74 C46,71 40,64 40,56 L40,43 Z"/>
+</vector>

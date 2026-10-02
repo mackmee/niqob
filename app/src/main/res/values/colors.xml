@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand colors used by launcher and system resources -->
+    <color name="ic_launcher_background">#0F172A</color>
+    <color name="primary_brand">#0284C7</color>
+</resources>
