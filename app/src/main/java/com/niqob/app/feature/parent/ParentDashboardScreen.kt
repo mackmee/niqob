@@ -28,13 +28,16 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -338,6 +341,14 @@ fun ParentDashboardScreen(
                 )
             }
 
+            // Phase 3D: Cloud Screen Time Usage Verification Section
+            item {
+                ParentScreenTimeUsageCard(
+                    uiState = uiState,
+                    onRefreshUsage = { viewModel.loadTodayUsage() }
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -435,3 +446,179 @@ private fun ParentActionCard(
         }
     }
 }
+
+@Composable
+private fun ParentScreenTimeUsageCard(
+    uiState: ParentDashboardUiState,
+    onRefreshUsage: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val usage = uiState.todayUsage
+    val isConnected = uiState.pairingSession?.status == com.niqob.app.domain.model.PairingStatus.CONNECTED || uiState.childDeviceId != null
+
+    NiqobCard(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HourglassTop,
+                            contentDescription = "Usage Sync",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Today's Screen Time Usage",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isConnected) "Synced from Supabase" else "Child device not connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (uiState.isUsageLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    IconButton(
+                        onClick = onRefreshUsage,
+                        enabled = isConnected
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Usage",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (!isConnected) {
+                Text(
+                    text = "Pair a child device to view real-time screen time usage.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (usage != null) {
+                // Exact fields required:
+                // Used, Limit, Remaining, Percentage, Status, Usage date, Last synced time
+                StatRowItem(
+                    label = "Used",
+                    value = "${usage.totalUsageMinutes} min",
+                    icon = Icons.Default.HourglassTop
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                StatRowItem(
+                    label = "Limit",
+                    value = "${usage.dailyLimitMinutes} min",
+                    icon = Icons.Default.Settings
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                StatRowItem(
+                    label = "Remaining",
+                    value = "${usage.remainingMinutes} min",
+                    icon = Icons.Default.CheckCircle,
+                    statusColor = if (usage.remainingMinutes > 0) com.niqob.app.core.ui.theme.SafeGreen else com.niqob.app.core.ui.theme.AlertAmber
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                StatRowItem(
+                    label = "Percentage",
+                    value = "${usage.usagePercentage}%",
+                    icon = Icons.Default.Apps,
+                    statusColor = if (usage.isLimitReached) com.niqob.app.core.ui.theme.AlertAmber else com.niqob.app.core.ui.theme.SafeGreen
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                StatRowItem(
+                    label = "Status",
+                    value = usage.statusText,
+                    icon = if (usage.isLimitReached) Icons.Default.Warning else Icons.Default.CheckCircle,
+                    statusColor = if (usage.isLimitReached) com.niqob.app.core.ui.theme.AlertAmber else com.niqob.app.core.ui.theme.SafeGreen
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                StatRowItem(
+                    label = "Usage date",
+                    value = usage.usageDate,
+                    icon = Icons.Default.CalendarToday
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                val syncedDateStr = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.getDefault())
+                    .format(java.util.Date(usage.updatedAt))
+                StatRowItem(
+                    label = "Last synced time",
+                    value = syncedDateStr,
+                    icon = Icons.Default.Sync,
+                    statusColor = com.niqob.app.core.ui.theme.SafeGreen
+                )
+            } else if (uiState.usageError != null) {
+                StatRowItem(
+                    label = "Sync Error",
+                    value = uiState.usageError,
+                    icon = Icons.Default.Warning,
+                    statusColor = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onRefreshUsage,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Retry")
+                }
+            } else {
+                Text(
+                    text = "No usage recorded yet for today (${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}). Once the child device reports usage, it will appear here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onRefreshUsage,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Check for Usage")
+                }
+            }
+        }
+    }
+}
+

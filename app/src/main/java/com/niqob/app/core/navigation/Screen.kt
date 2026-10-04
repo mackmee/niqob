@@ -23,4 +23,6 @@ sealed class Screen(val route: String) {
     data object ChildAi : Screen("child_ai")
     data object ChildAllowedApps : Screen("child_allowed_apps")
     data object ChildGoals : Screen("child_goals")
+    data object UsageAccessVerification : Screen("usage_access_verification")
+    data object ScreenTimeLimitReached : Screen("screen_time_limit_reached")
 }

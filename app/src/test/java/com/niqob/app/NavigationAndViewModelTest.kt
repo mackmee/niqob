@@ -34,11 +34,13 @@ class NavigationAndViewModelTest {
             Screen.ChildLearning.route,
             Screen.ChildAi.route,
             Screen.ChildAllowedApps.route,
-            Screen.ChildGoals.route
+            Screen.ChildGoals.route,
+            Screen.UsageAccessVerification.route,
+            Screen.ScreenTimeLimitReached.route
         )
 
-        assertEquals("Routes count", 17, routes.size)
-        assertEquals("Unique routes count", 17, routes.distinct().size)
+        assertEquals("Routes count", 19, routes.size)
+        assertEquals("Unique routes count", 19, routes.distinct().size)
 
     }
 

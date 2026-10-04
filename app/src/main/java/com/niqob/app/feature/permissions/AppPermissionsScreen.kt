@@ -21,9 +21,16 @@ import androidx.compose.ui.unit.dp
 import com.niqob.app.core.ui.components.NiqobCard
 import com.niqob.app.core.ui.components.NiqobTopAppBar
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material3.Button
+
 @Composable
 fun AppPermissionsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToUsageVerification: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -68,6 +75,22 @@ fun AppPermissionsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onNavigateToUsageVerification,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HourglassTop,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Verify Usage Access on Device")
+                    }
                 }
             }
         }

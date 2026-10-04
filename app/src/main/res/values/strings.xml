@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">NIQOB</string>
     <string name="app_tagline">Technology should grow with the child.</string>
+    <string name="accessibility_service_description">NIQOB uses this service solely to observe foreground applications when screen-time limits are active. It never reads messages, screen contents, or private personal data.</string>
 </resources>

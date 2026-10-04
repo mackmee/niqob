@@ -8,11 +8,13 @@ import com.niqob.app.data.repository.SupabaseAuthRepository
 import com.niqob.app.data.repository.SupabaseDeviceRepository
 import com.niqob.app.data.repository.SupabasePairingRepository
 import com.niqob.app.data.repository.SupabaseScreenTimeRepository
+import com.niqob.app.data.repository.SupabaseScreenTimeUsageRepository
 import com.niqob.app.domain.model.ChildDeviceStatus
 import com.niqob.app.domain.model.Device
 import com.niqob.app.domain.model.DeviceConnectivityStatus
 import com.niqob.app.domain.model.PairingSession
 import com.niqob.app.domain.model.PairingStatus
+import com.niqob.app.domain.model.ScreenTimeDailyUsage
 import com.niqob.app.domain.model.ScreenTimeLimit
 import com.niqob.app.domain.model.User
 import com.niqob.app.domain.repository.AuthRepository
@@ -20,6 +22,7 @@ import com.niqob.app.domain.repository.AuthState
 import com.niqob.app.domain.repository.DeviceRepository
 import com.niqob.app.domain.repository.PairingRepository
 import com.niqob.app.domain.repository.ScreenTimeRepository
+import com.niqob.app.domain.repository.ScreenTimeUsageRepository
 import com.niqob.app.domain.usecase.GetChildDeviceStatusUseCase
 import com.niqob.app.domain.usecase.GetPairingSessionUseCase
 import com.niqob.app.domain.usecase.ParentLogoutUseCase
@@ -27,6 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class ParentDashboardUiState(
     val user: User? = null,
@@ -48,7 +54,10 @@ data class ParentDashboardUiState(
     val isScreenTimeLoading: Boolean = false,
     val isScreenTimeSaving: Boolean = false,
     val screenTimeError: String? = null,
-    val screenTimeSaveSuccess: Boolean = false
+    val screenTimeSaveSuccess: Boolean = false,
+    val todayUsage: ScreenTimeDailyUsage? = null,
+    val isUsageLoading: Boolean = false,
+    val usageError: String? = null
 )
 
 class ParentDashboardViewModel(
@@ -60,7 +69,8 @@ class ParentDashboardViewModel(
     private val authRepository: AuthRepository = SupabaseAuthRepository(),
     private val deviceRepository: DeviceRepository = SupabaseDeviceRepository(),
     private val logoutUseCase: ParentLogoutUseCase = ParentLogoutUseCase(authRepository),
-    private val screenTimeRepository: ScreenTimeRepository = SupabaseScreenTimeRepository()
+    private val screenTimeRepository: ScreenTimeRepository = SupabaseScreenTimeRepository(),
+    private val screenTimeUsageRepository: ScreenTimeUsageRepository = SupabaseScreenTimeUsageRepository()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ParentDashboardUiState(user = authRepository.getCurrentUser()))
@@ -126,6 +136,7 @@ class ParentDashboardViewModel(
                             )
                         )
                         loadScreenTimeLimitInternal(childDevice.id)
+                        loadTodayUsageInternal(childDevice.id)
                     }
                 }
             }
@@ -185,6 +196,7 @@ class ParentDashboardViewModel(
 
                 if (resolvedChildDeviceId != null) {
                     loadScreenTimeLimitInternal(resolvedChildDeviceId)
+                    loadTodayUsageInternal(resolvedChildDeviceId)
                 }
             }
         } catch (_: Throwable) {
@@ -229,6 +241,7 @@ class ParentDashboardViewModel(
             try {
                 viewModelScope.launch {
                     loadScreenTimeLimitInternal(resolvedChildDeviceId)
+                    loadTodayUsageInternal(resolvedChildDeviceId)
                 }
             } catch (_: Throwable) {
                 // Handled for unit tests without main looper
@@ -280,6 +293,46 @@ class ParentDashboardViewModel(
             }
             is Result.Loading -> {
                 _uiState.value = _uiState.value.copy(isScreenTimeLoading = true)
+            }
+        }
+        return result
+    }
+
+    fun loadTodayUsage(targetDeviceId: String? = null) {
+        val deviceId = targetDeviceId ?: _uiState.value.childDeviceId ?: return
+        try {
+            viewModelScope.launch {
+                loadTodayUsageInternal(deviceId)
+            }
+        } catch (_: Throwable) {
+            // Handled for unit tests without main looper
+        }
+    }
+
+    suspend fun loadTodayUsageInternal(deviceId: String): Result<ScreenTimeDailyUsage?> {
+        _uiState.value = _uiState.value.copy(
+            isUsageLoading = true,
+            usageError = null,
+            childDeviceId = deviceId
+        )
+        val todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val result = screenTimeUsageRepository.getDailyUsage(deviceId, todayDateStr)
+        when (result) {
+            is Result.Success -> {
+                _uiState.value = _uiState.value.copy(
+                    todayUsage = result.data,
+                    isUsageLoading = false,
+                    usageError = null
+                )
+            }
+            is Result.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    isUsageLoading = false,
+                    usageError = result.exception.message ?: "Failed to load child usage"
+                )
+            }
+            is Result.Loading -> {
+                _uiState.value = _uiState.value.copy(isUsageLoading = true)
             }
         }
         return result

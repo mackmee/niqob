@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
@@ -48,6 +49,7 @@ fun ChildHomeScreen(
     onNavigateToAllowedApps: () -> Unit,
     onNavigateToGoals: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToUsageVerification: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: ChildHomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
@@ -143,6 +145,12 @@ fun ChildHomeScreen(
                         description = "Audio, avatar customizations, and preferences",
                         icon = Icons.Default.Settings,
                         onClick = onNavigateToSettings
+                    )
+                    ChildSectionCard(
+                        title = "Usage Access Verification",
+                        description = "Verify real Android UsageStats and today's screen time",
+                        icon = Icons.Default.HourglassTop,
+                        onClick = onNavigateToUsageVerification
                     )
                 }
             }
