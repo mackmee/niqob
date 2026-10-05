@@ -14,7 +14,8 @@ data class ScreenTimeEnforcementState(
     val remainingMinutes: Int,
     val usagePercentage: Int,
     val usageDate: String,
-    val isParentOverrideActive: Boolean = false,
+    val overrideSession: ParentOverrideSession? = null,
+    val isParentOverrideActive: Boolean = overrideSession?.isCurrentlyActive() == true,
     val status: ScreenTimeEnforcementStatus = when {
         !isEnforcementEnabled -> ScreenTimeEnforcementStatus.DISABLED
         isLimitReached -> ScreenTimeEnforcementStatus.LIMIT_REACHED
@@ -22,18 +23,35 @@ data class ScreenTimeEnforcementState(
     }
 ) {
     /**
+     * Effective parent override flag.
+     * When [overrideSession] is present, its expiration timestamp is authoritative:
+     * if current time >= expiresAtMillis, the session is expired and override is inactive.
+     */
+    fun isParentOverrideActiveEffective(currentTimeMillis: Long = System.currentTimeMillis()): Boolean =
+        overrideSession?.isCurrentlyActive(currentTimeMillis) ?: isParentOverrideActive
+
+    val isParentOverrideActiveEffective: Boolean
+        get() = isParentOverrideActiveEffective(System.currentTimeMillis())
+
+    /**
      * Enforcement is active only when the parent has enabled screen time limits
      * AND the child's usage has reached or exceeded the configured quota
-     * AND parent override is not currently active.
+     * AND parent override is absent or expired.
      */
+    fun isEnforcementActive(currentTimeMillis: Long = System.currentTimeMillis()): Boolean =
+        isEnforcementEnabled && isLimitReached && !isParentOverrideActiveEffective(currentTimeMillis)
+
     val isEnforcementActive: Boolean
-        get() = isEnforcementEnabled && isLimitReached && !isParentOverrideActive
+        get() = isEnforcementActive(System.currentTimeMillis())
 
     val isWithinLimit: Boolean
         get() = !isLimitReached
 
     companion object {
-        fun fromDailyScreenTimeStatus(dailyStatus: DailyScreenTimeStatus): ScreenTimeEnforcementState {
+        fun fromDailyScreenTimeStatus(
+            dailyStatus: DailyScreenTimeStatus,
+            overrideSession: ParentOverrideSession? = null
+        ): ScreenTimeEnforcementState {
             val enforcementStatus = when {
                 !dailyStatus.isEnabled -> ScreenTimeEnforcementStatus.DISABLED
                 dailyStatus.isLimitReached -> ScreenTimeEnforcementStatus.LIMIT_REACHED
@@ -48,6 +66,7 @@ data class ScreenTimeEnforcementState(
                 remainingMinutes = dailyStatus.remainingMinutes,
                 usagePercentage = dailyStatus.usagePercentage,
                 usageDate = dailyStatus.date,
+                overrideSession = overrideSession,
                 status = enforcementStatus
             )
         }

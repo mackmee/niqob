@@ -39,7 +39,7 @@ object AppEnforcementEvaluator {
     ): AppEnforcementDecision {
         val trimmedPackage = packageName.trim()
 
-        val isEnforcementActive = (enforcementState?.isEnforcementActive == true) || policy.isEnforcementActive
+        val isEnforcementActive = (enforcementState?.isEnforcementActive(timestampMillis) == true) || policy.isEnforcementActive
 
         // Rule D: NIQOB's own package is ALWAYS allowed
         if (trimmedPackage == AppEnforcementPolicy.NIQOB_PACKAGE_NAME) {
