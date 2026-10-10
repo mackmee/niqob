@@ -76,6 +76,7 @@ fun ParentDashboardScreen(
     onNavigateToAiSettings: () -> Unit,
     onNavigateToSafety: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToScreenTimeRequests: () -> Unit = {},
     onLogout: () -> Unit = onNavigateBack,
     modifier: Modifier = Modifier,
     viewModel: ParentDashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -346,6 +347,25 @@ fun ParentDashboardScreen(
                 ParentScreenTimeUsageCard(
                     uiState = uiState,
                     onRefreshUsage = { viewModel.loadTodayUsage() }
+                )
+            }
+
+            // Phase 4F-2: Screen Time Requests Section
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Screen Time Requests",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            item {
+                ParentActionCard(
+                    title = "Screen Time Requests",
+                    subtitle = "Review and approve pending extra screen time requests from child",
+                    icon = Icons.Default.HourglassTop,
+                    onClick = onNavigateToScreenTimeRequests
                 )
             }
 

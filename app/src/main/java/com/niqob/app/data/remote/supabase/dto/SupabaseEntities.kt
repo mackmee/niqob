@@ -78,7 +78,8 @@ data class PairChildRpcResponse(
     val status: String? = null,
     @SerialName("connected_at") val connectedAt: String? = null,
     @SerialName("error_code") val errorCode: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    @SerialName("device_secret") val deviceSecret: String? = null
 )
 
 @Serializable

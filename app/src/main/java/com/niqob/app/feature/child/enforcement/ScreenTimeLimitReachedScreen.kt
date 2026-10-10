@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -69,6 +70,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ScreenTimeLimitReachedScreen(
     onNavigateBack: () -> Unit = {},
+    onRequestRemoteOverride: () -> Unit = {},
     viewModel: ScreenTimeLimitReachedViewModel = viewModel()
 ) {
     val enforcementState by viewModel.enforcementState.collectAsState()
@@ -371,6 +373,25 @@ fun ScreenTimeLimitReachedScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isOverrideActive) "Extend Parent Override" else "Parent Override")
+                }
+            }
+
+            // Remote Screen Time Override Request
+            item {
+                OutlinedButton(
+                    onClick = onRequestRemoteOverride,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Request More Screen Time")
                 }
             }
 

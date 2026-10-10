@@ -29,8 +29,10 @@ import com.niqob.app.feature.child.enforcement.ScreenTimeLimitReachedScreen
 import com.niqob.app.feature.child.usage.UsageAccessScreen
 import com.niqob.app.feature.onboarding.WelcomeScreen
 import com.niqob.app.feature.pairing.DevicePairingScreen
+import com.niqob.app.feature.child.override.RemoteOverrideRequestScreen
 import com.niqob.app.feature.parent.ManageChildScreen
 import com.niqob.app.feature.parent.ParentDashboardScreen
+import com.niqob.app.feature.parent.override.ParentRemoteOverrideScreen
 import com.niqob.app.feature.permissions.AppPermissionsScreen
 import com.niqob.app.feature.safety.SafetyMonitoringScreen
 import com.niqob.app.feature.screentime.ScreenTimeScreen
@@ -161,6 +163,7 @@ fun NiqobNavHost(
                 onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) },
                 onNavigateToSafety = { navController.navigate(Screen.SafetyMonitoring.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                onNavigateToScreenTimeRequests = { navController.navigate(Screen.ParentRemoteOverride.route) },
                 onLogout = {
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(0) { inclusive = true }
@@ -260,7 +263,20 @@ fun NiqobNavHost(
                             popUpTo(0) { inclusive = true }
                         }
                     }
+                },
+                onRequestRemoteOverride = {
+                    navController.navigate(Screen.RemoteOverrideRequest.route)
                 }
+            )
+        }
+        composable(Screen.RemoteOverrideRequest.route) {
+            RemoteOverrideRequestScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.ParentRemoteOverride.route) {
+            ParentRemoteOverrideScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

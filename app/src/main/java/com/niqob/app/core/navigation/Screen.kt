@@ -25,4 +25,6 @@ sealed class Screen(val route: String) {
     data object ChildGoals : Screen("child_goals")
     data object UsageAccessVerification : Screen("usage_access_verification")
     data object ScreenTimeLimitReached : Screen("screen_time_limit_reached")
+    data object RemoteOverrideRequest : Screen("remote_override_request")
+    data object ParentRemoteOverride : Screen("parent_remote_override")
 }

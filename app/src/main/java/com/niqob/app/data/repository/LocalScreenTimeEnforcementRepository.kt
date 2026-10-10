@@ -36,9 +36,21 @@ class LocalScreenTimeEnforcementRepository(
             sessionStore?.clear()
         }
         val current = _enforcementState.value
+        val isActive = session != null && session.isCurrentlyActive(timeProvider())
         if (current != null) {
-            val isActive = session != null && session.isCurrentlyActive(timeProvider())
             _enforcementState.value = current.copy(
+                overrideSession = session,
+                isParentOverrideActive = isActive
+            )
+        } else if (session != null) {
+            _enforcementState.value = ScreenTimeEnforcementState(
+                isEnforcementEnabled = true,
+                isLimitReached = true,
+                usedMinutes = 0,
+                dailyLimitMinutes = 0,
+                remainingMinutes = 0,
+                usagePercentage = 100,
+                usageDate = "",
                 overrideSession = session,
                 isParentOverrideActive = isActive
             )
@@ -78,9 +90,12 @@ class LocalScreenTimeEnforcementRepository(
         @Volatile
         private var instance: LocalScreenTimeEnforcementRepository? = null
 
-        fun getInstance(sessionStore: ParentOverrideSessionStore? = null): LocalScreenTimeEnforcementRepository {
+        fun getInstance(
+            sessionStore: ParentOverrideSessionStore? = null,
+            timeProvider: () -> Long = { System.currentTimeMillis() }
+        ): LocalScreenTimeEnforcementRepository {
             return instance ?: synchronized(this) {
-                instance ?: LocalScreenTimeEnforcementRepository(sessionStore).also { instance = it }
+                instance ?: LocalScreenTimeEnforcementRepository(sessionStore, timeProvider).also { instance = it }
             }
         }
 

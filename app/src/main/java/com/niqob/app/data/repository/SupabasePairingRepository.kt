@@ -3,6 +3,8 @@ package com.niqob.app.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.remote.supabase.NiqobSupabaseClient
 import com.niqob.app.data.remote.supabase.dto.CreatePairingRpcResponse
 import com.niqob.app.data.remote.supabase.dto.PairChildRpcResponse
@@ -24,7 +26,8 @@ import java.util.TimeZone
 import java.util.UUID
 
 class SupabasePairingRepository(
-    private var sharedPreferences: SharedPreferences? = null
+    private var sharedPreferences: SharedPreferences? = null,
+    private var credentialStore: ChildDeviceCredentialStore? = null
 ) : PairingRepository {
 
     companion object {
@@ -42,8 +45,9 @@ class SupabasePairingRepository(
         fun getInstance(context: Context? = null): SupabasePairingRepository {
             val existing = instance
             if (existing != null) {
-                if (context != null && existing.sharedPreferences == null) {
-                    existing.initPreferences(context)
+                if (context != null) {
+                    if (existing.sharedPreferences == null) existing.initPreferences(context)
+                    if (existing.credentialStore == null) existing.initCredentialStore(context)
                 }
                 return existing
             }
@@ -51,6 +55,7 @@ class SupabasePairingRepository(
                 instance ?: SupabasePairingRepository().also { repo ->
                     if (context != null) {
                         repo.initPreferences(context)
+                        repo.initCredentialStore(context)
                     }
                     instance = repo
                 }
@@ -72,6 +77,25 @@ class SupabasePairingRepository(
             if (_pairingSession.value == null) {
                 _pairingSession.value = restoreSession()
             }
+        }
+        if (credentialStore == null) {
+            credentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance(context)
+        }
+    }
+
+    fun initCredentialStore(context: Context) {
+        if (credentialStore == null) {
+            credentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance(context)
+        }
+    }
+
+    fun setCredentialStore(store: ChildDeviceCredentialStore) {
+        this.credentialStore = store
+    }
+
+    private fun getOrCreateCredentialStore(): ChildDeviceCredentialStore {
+        return credentialStore ?: SharedPreferencesChildDeviceCredentialStore.getInstance().also {
+            credentialStore = it
         }
     }
 
@@ -207,12 +231,36 @@ class SupabasePairingRepository(
                 return Result.Error(Exception(userFriendlyMessage))
             }
 
+            val deviceId = rpcResponse.deviceId
+            val deviceSecret = rpcResponse.deviceSecret
+
+            // Security requirement: Both device_id and device_secret MUST be present in successful pairing
+            if (deviceId.isNullOrBlank() || deviceSecret.isNullOrBlank()) {
+                return Result.Error(
+                    Exception("Pairing failed: Device credentials incomplete in server response.")
+                )
+            }
+
+            // Security requirement: Persist credentials to secure store before reporting success
+            val store = getOrCreateCredentialStore()
+            val savedSuccessfully = try {
+                store.save(deviceId, deviceSecret)
+            } catch (_: Exception) {
+                false
+            }
+
+            if (!savedSuccessfully) {
+                return Result.Error(
+                    Exception("Pairing failed: Could not securely persist device credentials.")
+                )
+            }
+
             val connectedAtMillis = parseIsoTimestamp(rpcResponse.connectedAt) ?: System.currentTimeMillis()
 
             val session = PairingSession(
                 pairingId = rpcResponse.sessionId ?: UUID.randomUUID().toString(),
                 parentDeviceId = "parent_cloud",
-                childDeviceId = rpcResponse.deviceId ?: "child_dev_connected",
+                childDeviceId = deviceId,
                 pairingCode = trimmedCode,
                 createdAt = System.currentTimeMillis(),
                 expiresAt = System.currentTimeMillis() + 10 * 60 * 1000L,
@@ -222,7 +270,15 @@ class SupabasePairingRepository(
             )
 
             _pairingSession.value = session
-            persistSession(session)
+            try {
+                persistSession(session)
+            } catch (e: Exception) {
+                store.clear()
+                _pairingSession.value = null
+                return Result.Error(
+                    Exception("Pairing failed: Could not persist session.")
+                )
+            }
             Result.Success(session)
         } catch (e: Exception) {
             Result.Error(Exception(mapPairingError(e)))
@@ -250,6 +306,7 @@ class SupabasePairingRepository(
         }
 
         clearPersistedSession()
+        credentialStore?.clear()
 
         if (current != null) {
             _pairingSession.value = current.copy(
@@ -259,6 +316,17 @@ class SupabasePairingRepository(
         }
         return Result.Success(Unit)
     }
+
+    override fun getChildDeviceId(): String? {
+        return credentialStore?.getDeviceId() ?: _pairingSession.value?.childDeviceId
+    }
+
+    override fun getChildDeviceSecret(): String? {
+        return credentialStore?.getDeviceSecret()
+    }
+
+    fun getDeviceId(): String? = getChildDeviceId()
+    fun getDeviceSecret(): String? = getChildDeviceSecret()
 
     override fun getCurrentRole(): Flow<UserMode> {
         return _currentRole.asStateFlow()

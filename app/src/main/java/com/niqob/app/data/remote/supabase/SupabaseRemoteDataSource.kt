@@ -167,7 +167,8 @@ class SupabaseRemoteDataSource(
                     deviceName = json.optNullableString("device_name"),
                     status = json.optString("status", "CONNECTED"),
                     errorCode = errorCode,
-                    message = message
+                    message = message,
+                    deviceSecret = json.optNullableString("device_secret")
                 )
             )
         } catch (e: Exception) {

@@ -90,6 +90,17 @@ class FakePairingRepository : PairingRepository {
         _currentRole.value = role
     }
 
+    var fakeChildDeviceId: String? = null
+    var fakeChildDeviceSecret: String? = null
+
+    override fun getChildDeviceId(): String? {
+        return fakeChildDeviceId ?: _pairingSession.value?.childDeviceId
+    }
+
+    override fun getChildDeviceSecret(): String? {
+        return fakeChildDeviceSecret
+    }
+
     fun setSessionDirectly(session: PairingSession?) {
         _pairingSession.value = session
     }

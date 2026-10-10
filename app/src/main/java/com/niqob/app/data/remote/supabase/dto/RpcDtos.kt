@@ -8,7 +8,8 @@ data class PairChildResultDto(
     val deviceName: String? = null,
     val status: String? = null,
     val errorCode: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val deviceSecret: String? = null
 )
 
 data class CreatePairingResultDto(
