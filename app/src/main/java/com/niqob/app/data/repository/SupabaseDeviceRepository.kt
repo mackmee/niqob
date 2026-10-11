@@ -1,6 +1,8 @@
 package com.niqob.app.data.repository
 
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.remote.supabase.NiqobSupabaseClient
 import com.niqob.app.data.remote.supabase.dto.DeviceInsertTable
 import com.niqob.app.data.remote.supabase.dto.DeviceTable
@@ -8,6 +10,7 @@ import com.niqob.app.data.remote.supabase.dto.HeartbeatRpcResponse
 import com.niqob.app.domain.model.Device
 import com.niqob.app.domain.model.DeviceConnectivityStatus
 import com.niqob.app.domain.repository.DeviceRepository
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +21,11 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-class SupabaseDeviceRepository : DeviceRepository {
+class SupabaseDeviceRepository(
+    private val clientProvider: () -> SupabaseClient = { NiqobSupabaseClient.getClient() },
+    private val isConfiguredProvider: () -> Boolean = { NiqobSupabaseClient.isConfigured },
+    private val credentialStore: ChildDeviceCredentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance()
+) : DeviceRepository {
 
     private val _devicesFlow = MutableStateFlow<List<Device>>(emptyList())
 
@@ -28,14 +35,14 @@ class SupabaseDeviceRepository : DeviceRepository {
         platform: String,
         deviceType: String
     ): Result<Device> {
-        if (!NiqobSupabaseClient.isConfigured) {
+        if (!isConfiguredProvider()) {
             return Result.Error(
                 IllegalStateException("Supabase credentials not configured. Please supply SUPABASE_URL and SUPABASE_ANON_KEY in local.properties.")
             )
         }
 
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val insertPayload = DeviceInsertTable(
                 familyId = familyId,
                 deviceName = deviceName.ifBlank { "Child Device" },
@@ -64,26 +71,29 @@ class SupabaseDeviceRepository : DeviceRepository {
         }
     }
 
-    override suspend fun sendHeartbeat(deviceId: String): Result<Unit> {
-        if (!NiqobSupabaseClient.isConfigured) {
+    override suspend fun sendHeartbeat(deviceId: String, deviceSecret: String?): Result<Unit> {
+        if (!isConfiguredProvider()) {
             return Result.Error(
                 IllegalStateException("Supabase credentials not configured. Please supply SUPABASE_URL and SUPABASE_ANON_KEY in local.properties.")
             )
         }
 
+        val secret = (deviceSecret ?: credentialStore.getDeviceSecret())?.trim()
+
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val response = client.postgrest.rpc(
                 function = "update_device_heartbeat",
                 parameters = buildJsonObject {
                     put("p_device_id", deviceId)
+                    secret?.let { put("p_device_secret", it) }
                 }
             ).decodeAs<HeartbeatRpcResponse>()
 
             if (response.success) {
                 Result.Success(Unit)
             } else {
-                Result.Error(Exception(response.message ?: "Heartbeat failed on the server."))
+                Result.Error(Exception(response.message ?: response.errorCode ?: "Heartbeat failed on the server."))
             }
         } catch (e: Exception) {
             Result.Error(Exception("Heartbeat error: ${e.message}"))

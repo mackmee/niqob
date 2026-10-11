@@ -1,6 +1,8 @@
 package com.niqob.app.data.repository
 
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.remote.supabase.SupabaseConfig
 import com.niqob.app.data.remote.supabase.SupabaseRemoteDataSource
 import com.niqob.app.domain.model.Device
@@ -13,7 +15,8 @@ import java.util.UUID
 
 class DeviceRepositoryImpl(
     private val remoteDataSource: SupabaseRemoteDataSource = SupabaseRemoteDataSource(),
-    private val authRepository: AuthRepositoryImpl = AuthRepositoryImpl.getInstance()
+    private val authRepository: AuthRepositoryImpl = AuthRepositoryImpl.getInstance(),
+    private val credentialStore: ChildDeviceCredentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance()
 ) : DeviceRepository {
 
     private val _devices = MutableStateFlow<List<Device>>(emptyList())
@@ -39,9 +42,10 @@ class DeviceRepositoryImpl(
         return Result.Success(newDevice)
     }
 
-    override suspend fun sendHeartbeat(deviceId: String): Result<Unit> {
+    override suspend fun sendHeartbeat(deviceId: String, deviceSecret: String?): Result<Unit> {
+        val secret = (deviceSecret ?: credentialStore.getDeviceSecret())?.trim()
         if (SupabaseConfig.isConfigured) {
-            val result = remoteDataSource.updateHeartbeat(deviceId)
+            val result = remoteDataSource.updateHeartbeat(deviceId, secret)
             if (result is Result.Success) {
                 updateLocalDeviceTimestamp(deviceId, System.currentTimeMillis())
             }

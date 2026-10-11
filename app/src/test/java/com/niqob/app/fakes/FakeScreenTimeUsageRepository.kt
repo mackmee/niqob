@@ -20,7 +20,8 @@ class FakeScreenTimeUsageRepository : ScreenTimeUsageRepository {
         dailyLimitMinutes: Int?,
         remainingMinutes: Int?,
         usagePercentage: Int?,
-        isLimitReached: Boolean?
+        isLimitReached: Boolean?,
+        deviceSecret: String?
     ): Result<ScreenTimeDailyUsage> {
         if (shouldFail) {
             return Result.Error(failureException)
@@ -35,7 +36,7 @@ class FakeScreenTimeUsageRepository : ScreenTimeUsageRepository {
         val key = Pair(deviceId, usageDate)
         val existing = storage[key]
         val effectiveLimit = dailyLimitMinutes ?: existing?.dailyLimitMinutes ?: 120
-        val effectiveRemaining = remainingMinutes ?: maxOf(0, effectiveLimit - totalUsageMinutes)
+        val effectiveRemaining = maxOf(0, remainingMinutes ?: maxOf(0, effectiveLimit - totalUsageMinutes))
         val effectivePercentage = usagePercentage ?: if (effectiveLimit > 0) {
             ((totalUsageMinutes.toDouble() / effectiveLimit) * 100).toInt()
         } else 100
@@ -63,7 +64,8 @@ class FakeScreenTimeUsageRepository : ScreenTimeUsageRepository {
 
     override suspend fun getDailyUsage(
         deviceId: String,
-        usageDate: String
+        usageDate: String,
+        deviceSecret: String?
     ): Result<ScreenTimeDailyUsage?> {
         if (shouldFail) {
             return Result.Error(failureException)

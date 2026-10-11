@@ -1,6 +1,7 @@
 package com.niqob.app
 
 import android.app.Application
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.local.enforcement.SharedPreferencesParentOverrideSessionStore
 import com.niqob.app.data.repository.LocalScreenTimeEnforcementRepository
 import com.niqob.app.data.repository.SupabasePairingRepository
@@ -10,6 +11,9 @@ class NiqobApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Initialize child device credential store with application context
+        SharedPreferencesChildDeviceCredentialStore.getInstance(applicationContext)
+
         // Initialize pairing repository with application context
         SupabasePairingRepository.getInstance(applicationContext)
 

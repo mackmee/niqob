@@ -1,12 +1,15 @@
 package com.niqob.app.data.repository
 
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.remote.supabase.NiqobSupabaseClient
 import com.niqob.app.data.remote.supabase.dto.GetScreenTimeLimitRpcResponse
 import com.niqob.app.data.remote.supabase.dto.ScreenTimeLimitTable
 import com.niqob.app.data.remote.supabase.dto.SetScreenTimeLimitRpcResponse
 import com.niqob.app.domain.model.ScreenTimeLimit
 import com.niqob.app.domain.repository.ScreenTimeRepository
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -14,28 +17,39 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-class SupabaseScreenTimeRepository : ScreenTimeRepository {
+class SupabaseScreenTimeRepository(
+    private val clientProvider: () -> SupabaseClient = { NiqobSupabaseClient.getClient() },
+    private val isConfiguredProvider: () -> Boolean = { NiqobSupabaseClient.isConfigured },
+    private val credentialStore: ChildDeviceCredentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance()
+) : ScreenTimeRepository {
 
-    override suspend fun getScreenTimeLimit(deviceId: String): Result<ScreenTimeLimit> {
-        if (!NiqobSupabaseClient.isConfigured) {
+    override suspend fun getScreenTimeLimit(deviceId: String, deviceSecret: String?): Result<ScreenTimeLimit> {
+        if (deviceId.isBlank()) {
+            return Result.Error(IllegalArgumentException("Device ID cannot be blank."))
+        }
+
+        if (!isConfiguredProvider()) {
             return Result.Error(
                 IllegalStateException("Supabase credentials not configured. Please supply SUPABASE_URL and SUPABASE_ANON_KEY in local.properties.")
             )
         }
 
+        val secret = (deviceSecret ?: credentialStore.getDeviceSecret())?.trim()
+
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val response = client.postgrest.rpc(
                 function = "get_screen_time_limit",
                 parameters = buildJsonObject {
                     put("p_device_id", deviceId)
+                    secret?.let { put("p_device_secret", it) }
                 }
             ).decodeAs<GetScreenTimeLimitRpcResponse>()
 
             if (response.success && response.limit != null) {
                 Result.Success(mapTableToDomain(response.limit))
             } else {
-                Result.Error(Exception(response.message ?: "Failed to get screen time limit."))
+                Result.Error(Exception(response.message ?: response.errorCode ?: "Failed to get screen time limit."))
             }
         } catch (e: Exception) {
             Result.Error(Exception("Error getting screen time limit: ${e.message}"))

@@ -7,6 +7,7 @@ interface ScreenTimeUsageRepository {
     /**
      * Upserts the daily screen-time summary for a specific device and date.
      * Guaranteed to update existing record on (deviceId, usageDate) collision without duplicates.
+     * Optionally takes [deviceSecret] for child credential verification.
      */
     suspend fun upsertDailyUsage(
         deviceId: String,
@@ -15,15 +16,18 @@ interface ScreenTimeUsageRepository {
         dailyLimitMinutes: Int? = null,
         remainingMinutes: Int? = null,
         usagePercentage: Int? = null,
-        isLimitReached: Boolean? = null
+        isLimitReached: Boolean? = null,
+        deviceSecret: String? = null
     ): Result<ScreenTimeDailyUsage>
 
     /**
      * Retrieves the daily screen-time summary for a specific device and date.
      * Returns Result.Success(null) if no usage has been recorded yet today.
+     * Optionally takes [deviceSecret] for child credential verification.
      */
     suspend fun getDailyUsage(
         deviceId: String,
-        usageDate: String
+        usageDate: String,
+        deviceSecret: String? = null
     ): Result<ScreenTimeDailyUsage?>
 }

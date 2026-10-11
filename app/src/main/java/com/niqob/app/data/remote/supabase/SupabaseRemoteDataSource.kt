@@ -177,9 +177,10 @@ class SupabaseRemoteDataSource(
         }
     }
 
-    suspend fun updateHeartbeat(deviceId: String): Result<Unit> {
+    suspend fun updateHeartbeat(deviceId: String, deviceSecret: String? = null): Result<Unit> {
         val payload = JSONObject().apply {
             put("p_device_id", deviceId)
+            deviceSecret?.let { put("p_device_secret", it) }
         }
 
         val response = httpClient.post("/rest/v1/rpc/update_device_heartbeat", payload.toString())

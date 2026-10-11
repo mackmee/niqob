@@ -80,12 +80,16 @@ class SupabasePairingRepository(
         }
         if (credentialStore == null) {
             credentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance(context)
+        } else {
+            SharedPreferencesChildDeviceCredentialStore.getInstance(context)
         }
     }
 
     fun initCredentialStore(context: Context) {
         if (credentialStore == null) {
             credentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance(context)
+        } else {
+            SharedPreferencesChildDeviceCredentialStore.getInstance(context)
         }
     }
 

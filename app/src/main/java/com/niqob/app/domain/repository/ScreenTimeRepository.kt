@@ -4,7 +4,7 @@ import com.niqob.app.core.common.Result
 import com.niqob.app.domain.model.ScreenTimeLimit
 
 interface ScreenTimeRepository {
-    suspend fun getScreenTimeLimit(deviceId: String): Result<ScreenTimeLimit>
+    suspend fun getScreenTimeLimit(deviceId: String, deviceSecret: String? = null): Result<ScreenTimeLimit>
     suspend fun setScreenTimeLimit(
         deviceId: String,
         dailyLimitMinutes: Int,

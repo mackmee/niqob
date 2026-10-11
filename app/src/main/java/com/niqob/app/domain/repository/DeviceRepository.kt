@@ -13,7 +13,7 @@ interface DeviceRepository {
         deviceType: String = "CHILD_PHONE"
     ): Result<Device>
 
-    suspend fun sendHeartbeat(deviceId: String): Result<Unit>
+    suspend fun sendHeartbeat(deviceId: String, deviceSecret: String? = null): Result<Unit>
     fun getDevicesForFamily(familyId: String): Flow<List<Device>>
     fun calculateDeviceConnectivity(lastSeenAtMillis: Long): DeviceConnectivityStatus
     suspend fun fetchDevices(): Result<List<Device>> = Result.Success(emptyList())

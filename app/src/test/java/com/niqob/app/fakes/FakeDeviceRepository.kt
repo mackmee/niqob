@@ -40,7 +40,7 @@ class FakeDeviceRepository : DeviceRepository {
         return Result.Success(device)
     }
 
-    override suspend fun sendHeartbeat(deviceId: String): Result<Unit> {
+    override suspend fun sendHeartbeat(deviceId: String, deviceSecret: String?): Result<Unit> {
         if (shouldFailHeartbeat) {
             return Result.Error(Exception("Heartbeat failed (simulated)."))
         }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.local.usage.AndroidUsageStatsDataSource
 import com.niqob.app.data.repository.AndroidUsageStatsRepository
 import com.niqob.app.data.repository.SupabasePairingRepository
@@ -40,12 +41,15 @@ class ScreenTimeUsageSyncWorker(
         syncUseCase = null
     )
 
-    private val effectiveUseCase: ScreenTimeUsageSyncUseCase = syncUseCase ?: ScreenTimeUsageSyncUseCase(
-        usageStatsRepo = usageStatsRepository ?: AndroidUsageStatsRepository(AndroidUsageStatsDataSource(applicationContext)),
-        screenTimeRepo = screenTimeRepository ?: SupabaseScreenTimeRepository(),
-        pairingRepo = pairingRepository ?: SupabasePairingRepository.getInstance(applicationContext),
-        screenTimeUsageRepo = screenTimeUsageRepository ?: SupabaseScreenTimeUsageRepository()
-    )
+    private val effectiveUseCase: ScreenTimeUsageSyncUseCase = syncUseCase ?: run {
+        val credStore = SharedPreferencesChildDeviceCredentialStore.getInstance(applicationContext)
+        ScreenTimeUsageSyncUseCase(
+            usageStatsRepo = usageStatsRepository ?: AndroidUsageStatsRepository(AndroidUsageStatsDataSource(applicationContext)),
+            screenTimeRepo = screenTimeRepository ?: SupabaseScreenTimeRepository(credentialStore = credStore),
+            pairingRepo = pairingRepository ?: SupabasePairingRepository.getInstance(applicationContext),
+            screenTimeUsageRepo = screenTimeUsageRepository ?: SupabaseScreenTimeUsageRepository(credentialStore = credStore)
+        )
+    }
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Executing WorkManager periodic sync (attempt $runAttemptCount)...")

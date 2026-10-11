@@ -1,12 +1,15 @@
 package com.niqob.app.data.repository
 
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.data.remote.supabase.NiqobSupabaseClient
 import com.niqob.app.data.remote.supabase.dto.DailyUsageRecordDto
 import com.niqob.app.data.remote.supabase.dto.GetDailyUsageResponseDto
 import com.niqob.app.data.remote.supabase.dto.UpsertDailyUsageResponseDto
 import com.niqob.app.domain.model.ScreenTimeDailyUsage
 import com.niqob.app.domain.repository.ScreenTimeUsageRepository
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -14,7 +17,11 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
+class SupabaseScreenTimeUsageRepository(
+    private val clientProvider: () -> SupabaseClient = { NiqobSupabaseClient.getClient() },
+    private val isConfiguredProvider: () -> Boolean = { NiqobSupabaseClient.isConfigured },
+    private val credentialStore: ChildDeviceCredentialStore = SharedPreferencesChildDeviceCredentialStore.getInstance()
+) : ScreenTimeUsageRepository {
 
     override suspend fun upsertDailyUsage(
         deviceId: String,
@@ -23,7 +30,8 @@ class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
         dailyLimitMinutes: Int?,
         remainingMinutes: Int?,
         usagePercentage: Int?,
-        isLimitReached: Boolean?
+        isLimitReached: Boolean?,
+        deviceSecret: String?
     ): Result<ScreenTimeDailyUsage> {
         if (deviceId.isBlank()) {
             return Result.Error(IllegalArgumentException("Device ID cannot be blank."))
@@ -35,14 +43,16 @@ class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
             return Result.Error(IllegalArgumentException("Total usage minutes cannot be negative."))
         }
 
-        if (!NiqobSupabaseClient.isConfigured) {
+        if (!isConfiguredProvider()) {
             return Result.Error(
                 IllegalStateException("Supabase credentials not configured. Please supply SUPABASE_URL and SUPABASE_ANON_KEY in local.properties.")
             )
         }
 
+        val secret = (deviceSecret ?: credentialStore.getDeviceSecret())?.trim()
+
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val response = client.postgrest.rpc(
                 function = "upsert_screen_time_usage_daily",
                 parameters = buildJsonObject {
@@ -53,6 +63,7 @@ class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
                     remainingMinutes?.let { put("p_remaining_minutes", it) }
                     usagePercentage?.let { put("p_usage_percentage", it) }
                     isLimitReached?.let { put("p_is_limit_reached", it) }
+                    secret?.let { put("p_device_secret", it) }
                 }
             ).decodeAs<UpsertDailyUsageResponseDto>()
 
@@ -68,7 +79,8 @@ class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
 
     override suspend fun getDailyUsage(
         deviceId: String,
-        usageDate: String
+        usageDate: String,
+        deviceSecret: String?
     ): Result<ScreenTimeDailyUsage?> {
         if (deviceId.isBlank()) {
             return Result.Error(IllegalArgumentException("Device ID cannot be blank."))
@@ -77,19 +89,22 @@ class SupabaseScreenTimeUsageRepository : ScreenTimeUsageRepository {
             return Result.Error(IllegalArgumentException("Usage date cannot be blank."))
         }
 
-        if (!NiqobSupabaseClient.isConfigured) {
+        if (!isConfiguredProvider()) {
             return Result.Error(
                 IllegalStateException("Supabase credentials not configured. Please supply SUPABASE_URL and SUPABASE_ANON_KEY in local.properties.")
             )
         }
 
+        val secret = (deviceSecret ?: credentialStore.getDeviceSecret())?.trim()
+
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val response = client.postgrest.rpc(
                 function = "get_screen_time_usage_daily",
                 parameters = buildJsonObject {
                     put("p_device_id", deviceId)
                     put("p_usage_date", usageDate)
+                    secret?.let { put("p_device_secret", it) }
                 }
             ).decodeAs<GetDailyUsageResponseDto>()
 

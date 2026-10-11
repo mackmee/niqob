@@ -12,7 +12,7 @@ class FakeScreenTimeRepository(
     var shouldFail: Boolean = false
     var failureMessage: String = "Simulated screen time repository error"
 
-    override suspend fun getScreenTimeLimit(deviceId: String): Result<ScreenTimeLimit> {
+    override suspend fun getScreenTimeLimit(deviceId: String, deviceSecret: String?): Result<ScreenTimeLimit> {
         if (shouldFail) {
             return Result.Error(Exception(failureMessage))
         }

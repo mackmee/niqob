@@ -158,7 +158,7 @@ object NoOpDeviceSecretCipher : DeviceSecretCipher {
  * - In-memory fallback if SharedPreferences is null (for headless unit tests)
  */
 class SharedPreferencesChildDeviceCredentialStore(
-    private val sharedPreferences: SharedPreferences? = null,
+    sharedPreferences: SharedPreferences? = null,
     private val cipher: DeviceSecretCipher = defaultCipher()
 ) : ChildDeviceCredentialStore {
 
@@ -173,20 +173,48 @@ class SharedPreferencesChildDeviceCredentialStore(
         fun getInstance(context: Context? = null): SharedPreferencesChildDeviceCredentialStore {
             val existing = instance
             if (existing != null) {
+                if (context != null && !existing.hasSharedPreferences()) {
+                    existing.attachContext(context)
+                }
                 return existing
             }
             return synchronized(this) {
-                instance ?: SharedPreferencesChildDeviceCredentialStore(
-                    sharedPreferences = context?.applicationContext?.getSharedPreferences(
-                        PREFS_NAME,
-                        Context.MODE_PRIVATE
-                    )
-                ).also { instance = it }
+                val current = instance
+                if (current != null) {
+                    if (context != null && !current.hasSharedPreferences()) {
+                        current.attachContext(context)
+                    }
+                    current
+                } else {
+                    val prefs = resolveSharedPreferences(context)
+                    SharedPreferencesChildDeviceCredentialStore(
+                        sharedPreferences = prefs,
+                        cipher = defaultCipher()
+                    ).also { instance = it }
+                }
+            }
+        }
+
+        private fun resolveSharedPreferences(context: Context?): SharedPreferences? {
+            if (context == null) return null
+            return try {
+                val appContext = context.applicationContext ?: context
+                appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            } catch (_: Throwable) {
+                null
             }
         }
 
         fun resetInstanceForTesting() {
-            instance = null
+            synchronized(this) {
+                instance = null
+            }
+        }
+
+        fun setInstanceForTesting(store: SharedPreferencesChildDeviceCredentialStore?) {
+            synchronized(this) {
+                instance = store
+            }
         }
 
         private fun defaultCipher(): DeviceSecretCipher {
@@ -198,8 +226,48 @@ class SharedPreferencesChildDeviceCredentialStore(
         }
     }
 
+    @Volatile
+    private var sharedPreferences: SharedPreferences? = sharedPreferences
+
     // In-memory backing store for headless testing when SharedPreferences is null
     private val inMemoryFallback = mutableMapOf<String, String>()
+
+    fun hasSharedPreferences(): Boolean = sharedPreferences != null
+
+    @Synchronized
+    fun attachContext(context: Context) {
+        if (this.sharedPreferences == null) {
+            val prefs = resolveSharedPreferences(context)
+            if (prefs != null) {
+                attachSharedPreferences(prefs)
+            }
+        }
+    }
+
+    @Synchronized
+    fun attachSharedPreferences(prefs: SharedPreferences): Boolean {
+        if (this.sharedPreferences != null) {
+            return true
+        }
+        // Migrate any credentials temporarily saved to inMemoryFallback to persistent SharedPreferences
+        if (inMemoryFallback.isNotEmpty()) {
+            val editor = prefs.edit()
+            inMemoryFallback.forEach { (key, value) ->
+                editor.putString(key, value)
+            }
+            val committed = try {
+                editor.commit()
+            } catch (_: Throwable) {
+                false
+            }
+            if (!committed) {
+                return false
+            }
+            inMemoryFallback.clear()
+        }
+        this.sharedPreferences = prefs
+        return true
+    }
 
     @Synchronized
     override fun save(deviceId: String, deviceSecret: String): Boolean {
@@ -242,8 +310,9 @@ class SharedPreferencesChildDeviceCredentialStore(
 
     @Synchronized
     override fun getDeviceSecret(): String? {
-        val encryptedSecret = if (sharedPreferences != null) {
-            sharedPreferences.getString(KEY_ENCRYPTED_SECRET, null)
+        val prefs = sharedPreferences
+        val encryptedSecret = if (prefs != null) {
+            prefs.getString(KEY_ENCRYPTED_SECRET, null)
         } else {
             inMemoryFallback[KEY_ENCRYPTED_SECRET]
         } ?: return null
@@ -257,7 +326,8 @@ class SharedPreferencesChildDeviceCredentialStore(
 
     @Synchronized
     override fun clear() {
-        sharedPreferences?.edit()
+        val prefs = sharedPreferences
+        prefs?.edit()
             ?.remove(KEY_DEVICE_ID)
             ?.remove(KEY_ENCRYPTED_SECRET)
             ?.commit()
