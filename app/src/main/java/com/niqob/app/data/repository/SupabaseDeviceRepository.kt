@@ -12,6 +12,7 @@ import com.niqob.app.domain.model.DeviceConnectivityStatus
 import com.niqob.app.domain.repository.DeviceRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,15 +101,29 @@ class SupabaseDeviceRepository(
         }
     }
 
+    companion object {
+        val DEVICE_COLUMNS = listOf(
+            "id",
+            "family_id",
+            "user_id",
+            "device_name",
+            "platform",
+            "device_type",
+            "last_seen_at",
+            "created_at",
+            "updated_at"
+        )
+    }
+
     override suspend fun fetchDevices(): Result<List<Device>> {
-        if (!NiqobSupabaseClient.isConfigured) {
+        if (!isConfiguredProvider()) {
             return Result.Success(_devicesFlow.value)
         }
 
         return try {
-            val client = NiqobSupabaseClient.getClient()
+            val client = clientProvider()
             val deviceTables = client.postgrest["devices"]
-                .select()
+                .select(columns = Columns.list(DEVICE_COLUMNS))
                 .decodeList<DeviceTable>()
                 .sortedByDescending { it.lastSeenAt }
 
