@@ -89,6 +89,13 @@ class ScreenTimeUsageSyncWorker(
                 Result.retry()
             }
             is SyncExecutionResult.Failure -> {
+                if (outcome.isPermanentAuthorizationFailure) {
+                    try {
+                        ScreenTimeSyncScheduler.cancel(applicationContext)
+                    } catch (_: Throwable) {
+                        // Best effort cancel of periodic scheduling
+                    }
+                }
                 ScreenTimeSyncScheduler.recordSyncResult(
                     applicationContext,
                     status = ScreenTimeSyncScheduler.SYNC_STATUS_FAILED,

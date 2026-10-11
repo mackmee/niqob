@@ -63,6 +63,10 @@ class FakeDeviceRepository : DeviceRepository {
         return DeviceConnectivityStatus.calculate(lastSeenAtMillis, currentMockTimeMillis)
     }
 
+    override suspend fun fetchDevices(): Result<List<Device>> {
+        return Result.Success(_devicesFlow.value)
+    }
+
     fun setDevicesDirectly(devices: List<Device>) {
         _devicesFlow.value = devices
     }

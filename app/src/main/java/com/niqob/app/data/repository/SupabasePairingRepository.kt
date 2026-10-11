@@ -310,13 +310,15 @@ class SupabasePairingRepository(
         }
 
         clearPersistedSession()
-        credentialStore?.clear()
+        getOrCreateCredentialStore().clear()
 
         if (current != null) {
             _pairingSession.value = current.copy(
                 status = PairingStatus.REVOKED,
                 revokedAt = System.currentTimeMillis()
             )
+        } else {
+            _pairingSession.value = null
         }
         return Result.Success(Unit)
     }
@@ -338,6 +340,11 @@ class SupabasePairingRepository(
 
     override suspend fun setCurrentRole(role: UserMode) {
         _currentRole.value = role
+    }
+
+    override suspend fun clearParentSession(): Result<Unit> {
+        _pairingSession.value = null
+        return Result.Success(Unit)
     }
 
     override suspend fun syncPairingSession(): Result<PairingSession?> {
@@ -362,7 +369,8 @@ class SupabasePairingRepository(
                 .sortedByDescending { it.createdAt }
 
             if (sessions.isEmpty()) {
-                Result.Success(_pairingSession.value)
+                _pairingSession.value = null
+                Result.Success(null)
             } else {
                 val dto = sessions.first()
                 val parsedStatus = try {

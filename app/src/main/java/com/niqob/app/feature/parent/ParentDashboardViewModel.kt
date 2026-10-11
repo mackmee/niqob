@@ -98,7 +98,8 @@ class ParentDashboardViewModel(
                         _uiState.value = _uiState.value.copy(user = authState.user)
                         syncRemoteData()
                     } else if (authState is AuthState.Unauthenticated) {
-                        _uiState.value = _uiState.value.copy(user = null)
+                        pairingRepository.clearParentSession()
+                        _uiState.value = ParentDashboardUiState(user = null)
                     }
                 }
             }
@@ -148,14 +149,14 @@ class ParentDashboardViewModel(
         }
     }
 
-    private suspend fun syncRemoteData() {
+    suspend fun syncRemoteData() {
         try {
             pairingRepository.syncPairingSession()
             val deviceResult = deviceRepository.fetchDevices()
             val devices: List<Device> = (deviceResult as? Result.Success<List<Device>>)?.data ?: emptyList()
             val childDevice = devices.firstOrNull { it.deviceType == "CHILD_PHONE" } ?: devices.firstOrNull()
 
-            val session = (pairingRepository.getPairingSession() as? StateFlow)?.value ?: _uiState.value.pairingSession
+            val session = (pairingRepository.getPairingSession() as? StateFlow)?.value
             val isConnected = session?.status == PairingStatus.CONNECTED || childDevice != null
             val resolvedChildDeviceId = childDevice?.id ?: session?.childDeviceId
 
@@ -198,6 +199,23 @@ class ParentDashboardViewModel(
                     loadScreenTimeLimitInternal(resolvedChildDeviceId)
                     loadTodayUsageInternal(resolvedChildDeviceId)
                 }
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    pairingSession = null,
+                    connectivityStatus = DeviceConnectivityStatus.OFFLINE,
+                    childDeviceId = null,
+                    childStatus = ChildDeviceStatus(
+                        isConnected = false,
+                        deviceName = "Not connected",
+                        screenTimeMinutes = 0,
+                        allowedAppsCount = 0,
+                        safetyAlertsCount = 0
+                    ),
+                    screenTimeLimitMinutes = 120,
+                    selectedScreenTimeMinutes = 120,
+                    todayUsage = null,
+                    isLoading = false
+                )
             }
         } catch (_: Throwable) {
             // Best effort remote sync
@@ -217,11 +235,11 @@ class ParentDashboardViewModel(
             _uiState.value.connectivityStatus
         }
 
-        val resolvedChildDeviceId = session?.childDeviceId ?: _uiState.value.childDeviceId
+        val resolvedChildDeviceId = session?.childDeviceId
 
         _uiState.value = _uiState.value.copy(
-            pairingSession = session ?: _uiState.value.pairingSession,
-            connectivityStatus = if (isConnected) connectivity else _uiState.value.connectivityStatus,
+            pairingSession = session,
+            connectivityStatus = if (isConnected) connectivity else DeviceConnectivityStatus.OFFLINE,
             lastSeenAt = if (isConnected) lastSeen else _uiState.value.lastSeenAt,
             childDeviceId = resolvedChildDeviceId,
             childStatus = if (isConnected) {
@@ -233,7 +251,13 @@ class ParentDashboardViewModel(
                     safetyAlertsCount = _uiState.value.childStatus.safetyAlertsCount
                 )
             } else {
-                _uiState.value.childStatus
+                ChildDeviceStatus(
+                    isConnected = false,
+                    deviceName = "Not connected",
+                    screenTimeMinutes = 0,
+                    allowedAppsCount = 0,
+                    safetyAlertsCount = 0
+                )
             }
         )
 
@@ -467,10 +491,16 @@ class ParentDashboardViewModel(
         }
     }
 
+    suspend fun logoutInternal() {
+        logoutUseCase()
+        pairingRepository.clearParentSession()
+        _uiState.value = ParentDashboardUiState(user = null)
+    }
+
     fun logout(onLoggedOut: () -> Unit) {
         try {
             viewModelScope.launch {
-                logoutUseCase()
+                logoutInternal()
                 onLoggedOut()
             }
         } catch (_: Throwable) {

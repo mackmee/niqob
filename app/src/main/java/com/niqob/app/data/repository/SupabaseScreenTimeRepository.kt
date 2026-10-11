@@ -1,5 +1,6 @@
 package com.niqob.app.data.repository
 
+import com.niqob.app.core.common.ChildAuthorizationRevokedException
 import com.niqob.app.core.common.Result
 import com.niqob.app.data.local.ChildDeviceCredentialStore
 import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
@@ -49,10 +50,21 @@ class SupabaseScreenTimeRepository(
             if (response.success && response.limit != null) {
                 Result.Success(mapTableToDomain(response.limit))
             } else {
-                Result.Error(Exception(response.message ?: response.errorCode ?: "Failed to get screen time limit."))
+                val errorCode = response.errorCode
+                val msg = response.message ?: errorCode ?: "Failed to get screen time limit."
+                if (errorCode == "UNAUTHORIZED" || msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                    Result.Error(ChildAuthorizationRevokedException(errorCode ?: "UNAUTHORIZED", msg))
+                } else {
+                    Result.Error(Exception(msg))
+                }
             }
         } catch (e: Exception) {
-            Result.Error(Exception("Error getting screen time limit: ${e.message}"))
+            val msg = e.message ?: ""
+            if (msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                Result.Error(ChildAuthorizationRevokedException("UNAUTHORIZED", msg))
+            } else {
+                Result.Error(Exception("Error getting screen time limit: ${e.message}"))
+            }
         }
     }
 

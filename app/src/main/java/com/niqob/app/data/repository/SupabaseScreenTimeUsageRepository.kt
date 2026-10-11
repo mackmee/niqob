@@ -1,5 +1,6 @@
 package com.niqob.app.data.repository
 
+import com.niqob.app.core.common.ChildAuthorizationRevokedException
 import com.niqob.app.core.common.Result
 import com.niqob.app.data.local.ChildDeviceCredentialStore
 import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
@@ -70,10 +71,21 @@ class SupabaseScreenTimeUsageRepository(
             if (response.success && response.usage != null) {
                 Result.Success(mapDtoToDomain(response.usage))
             } else {
-                Result.Error(Exception(response.message ?: response.errorCode ?: "Failed to sync daily usage."))
+                val errorCode = response.errorCode
+                val msg = response.message ?: errorCode ?: "Failed to sync daily usage."
+                if (errorCode == "UNAUTHORIZED" || msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                    Result.Error(ChildAuthorizationRevokedException(errorCode ?: "UNAUTHORIZED", msg))
+                } else {
+                    Result.Error(Exception(msg))
+                }
             }
         } catch (e: Exception) {
-            Result.Error(Exception("Error syncing screen time usage: ${e.message}"))
+            val msg = e.message ?: ""
+            if (msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                Result.Error(ChildAuthorizationRevokedException("UNAUTHORIZED", msg))
+            } else {
+                Result.Error(Exception("Error syncing screen time usage: ${e.message}"))
+            }
         }
     }
 
@@ -115,10 +127,21 @@ class SupabaseScreenTimeUsageRepository(
                     Result.Success(null)
                 }
             } else {
-                Result.Error(Exception(response.message ?: response.errorCode ?: "Failed to get daily usage."))
+                val errorCode = response.errorCode
+                val msg = response.message ?: errorCode ?: "Failed to get daily usage."
+                if (errorCode == "UNAUTHORIZED" || msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                    Result.Error(ChildAuthorizationRevokedException(errorCode ?: "UNAUTHORIZED", msg))
+                } else {
+                    Result.Error(Exception(msg))
+                }
             }
         } catch (e: Exception) {
-            Result.Error(Exception("Error fetching screen time usage: ${e.message}"))
+            val msg = e.message ?: ""
+            if (msg.contains("UNAUTHORIZED") || msg.contains("Invalid device authorization")) {
+                Result.Error(ChildAuthorizationRevokedException("UNAUTHORIZED", msg))
+            } else {
+                Result.Error(Exception("Error fetching screen time usage: ${e.message}"))
+            }
         }
     }
 

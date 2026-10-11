@@ -1,6 +1,7 @@
 package com.niqob.app.feature.child.usage.sync
 
 import android.util.Log
+import com.niqob.app.core.common.ChildAuthorizationRevokedException
 import com.niqob.app.core.common.Result as NiqobResult
 import com.niqob.app.domain.calculator.DailyScreenTimeCalculator
 import com.niqob.app.domain.model.PairingSession
@@ -23,7 +24,10 @@ sealed class SyncExecutionResult {
 
     data class Skipped(val reason: String) : SyncExecutionResult()
     data class Retry(val message: String?) : SyncExecutionResult()
-    data class Failure(val message: String?) : SyncExecutionResult()
+    data class Failure(
+        val message: String?,
+        val isPermanentAuthorizationFailure: Boolean = false
+    ) : SyncExecutionResult()
 }
 
 class ScreenTimeUsageSyncUseCase(
@@ -94,6 +98,12 @@ class ScreenTimeUsageSyncUseCase(
                 isLimitEnabled = limitResult.data.enabled
             }
             is NiqobResult.Error -> {
+                if (limitResult.exception is ChildAuthorizationRevokedException) {
+                    val msg = limitResult.exception.message ?: "Child authorization revoked"
+                    Log.w(TAG, "Child device authorization was rejected during getScreenTimeLimit: $msg")
+                    pairingRepo.revokePairing()
+                    return SyncExecutionResult.Failure(msg, isPermanentAuthorizationFailure = true)
+                }
                 Log.w(TAG, "Could not fetch limit from server, using default limit: ${limitResult.exception.message}")
             }
             is NiqobResult.Loading -> { /* use defaults */ }
@@ -130,11 +140,17 @@ class ScreenTimeUsageSyncUseCase(
             }
             is NiqobResult.Error -> {
                 val errorMsg = syncResult.exception.message ?: "Failed to sync daily usage to Supabase"
-                Log.e(TAG, "Screen time usage sync failed: $errorMsg")
-                if (attemptCount < maxRetries) {
-                    SyncExecutionResult.Retry(errorMsg)
+                if (syncResult.exception is ChildAuthorizationRevokedException) {
+                    Log.e(TAG, "Screen time usage sync permanently rejected: $errorMsg")
+                    pairingRepo.revokePairing()
+                    SyncExecutionResult.Failure(errorMsg, isPermanentAuthorizationFailure = true)
                 } else {
-                    SyncExecutionResult.Failure(errorMsg)
+                    Log.e(TAG, "Screen time usage sync failed: $errorMsg")
+                    if (attemptCount < maxRetries) {
+                        SyncExecutionResult.Retry(errorMsg)
+                    } else {
+                        SyncExecutionResult.Failure(errorMsg, isPermanentAuthorizationFailure = false)
+                    }
                 }
             }
             is NiqobResult.Loading -> SyncExecutionResult.Retry("sync_loading")

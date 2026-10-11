@@ -71,6 +71,8 @@ class FakePairingRepository : PairingRepository {
         return _pairingSession.asStateFlow()
     }
 
+    var credentialStore: com.niqob.app.data.local.ChildDeviceCredentialStore? = null
+
     override suspend fun revokePairing(): Result<Unit> {
         val session = _pairingSession.value
         if (session != null) {
@@ -79,6 +81,9 @@ class FakePairingRepository : PairingRepository {
                 revokedAt = currentMockTimeMillis
             )
         }
+        fakeChildDeviceId = null
+        fakeChildDeviceSecret = null
+        credentialStore?.clear()
         return Result.Success(Unit)
     }
 
@@ -99,6 +104,26 @@ class FakePairingRepository : PairingRepository {
 
     override fun getChildDeviceSecret(): String? {
         return fakeChildDeviceSecret
+    }
+
+    var syncReturnsEmpty: Boolean = false
+    var syncFailureException: Exception? = null
+
+    override suspend fun syncPairingSession(): Result<PairingSession?> {
+        val failure = syncFailureException
+        if (failure != null) {
+            return Result.Error(failure)
+        }
+        if (syncReturnsEmpty) {
+            _pairingSession.value = null
+            return Result.Success(null)
+        }
+        return Result.Success(_pairingSession.value)
+    }
+
+    override suspend fun clearParentSession(): Result<Unit> {
+        _pairingSession.value = null
+        return Result.Success(Unit)
     }
 
     fun setSessionDirectly(session: PairingSession?) {

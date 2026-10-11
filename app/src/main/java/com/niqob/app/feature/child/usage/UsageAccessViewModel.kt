@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.niqob.app.core.common.ChildAuthorizationRevokedException
 import com.niqob.app.core.common.Result
 import com.niqob.app.data.local.usage.AndroidUsageStatsDataSource
 import com.niqob.app.data.repository.AndroidUsageStatsRepository
@@ -231,10 +232,19 @@ class UsageAccessViewModel(
                     )
                 }
                 is Result.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLimitLoading = false,
-                        limitErrorMessage = limitResult.exception.message
-                    )
+                    if (limitResult.exception is ChildAuthorizationRevokedException) {
+                        pairingRepository.revokePairing()
+                        _uiState.value = _uiState.value.copy(
+                            isLimitLoading = false,
+                            limitErrorMessage = limitResult.exception.message,
+                            childDeviceId = null
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLimitLoading = false,
+                            limitErrorMessage = limitResult.exception.message
+                        )
+                    }
                 }
                 is Result.Loading -> {
                     _uiState.value = _uiState.value.copy(isLimitLoading = true)
@@ -340,10 +350,19 @@ class UsageAccessViewModel(
                 )
             }
             is Result.Error -> {
-                _uiState.value = _uiState.value.copy(
-                    isSyncing = false,
-                    syncErrorMessage = result.exception.message ?: "Failed to sync daily usage to cloud."
-                )
+                if (result.exception is ChildAuthorizationRevokedException) {
+                    pairingRepository.revokePairing()
+                    _uiState.value = _uiState.value.copy(
+                        isSyncing = false,
+                        syncErrorMessage = result.exception.message ?: "Failed to sync daily usage to cloud.",
+                        childDeviceId = null
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isSyncing = false,
+                        syncErrorMessage = result.exception.message ?: "Failed to sync daily usage to cloud."
+                    )
+                }
             }
             is Result.Loading -> {
                 _uiState.value = _uiState.value.copy(isSyncing = true)
