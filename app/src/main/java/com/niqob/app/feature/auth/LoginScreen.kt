@@ -62,6 +62,11 @@ fun LoginScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val handleSuccess = {
+        com.niqob.app.feature.child.usage.sync.ScreenTimeSyncScheduler.cancel(context)
+        onLoginSuccess()
+    }
 
     Scaffold(
         topBar = {
@@ -167,7 +172,7 @@ fun LoginScreen(
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { viewModel.login(onLoginSuccess) }
+                            onDone = { viewModel.login(handleSuccess) }
                         ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -189,7 +194,7 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = { viewModel.login(onLoginSuccess) },
+                        onClick = { viewModel.login(handleSuccess) },
                         enabled = !uiState.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()

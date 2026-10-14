@@ -91,7 +91,15 @@ class FakePairingRepository : PairingRepository {
         return _currentRole.asStateFlow()
     }
 
+    override fun getCurrentRoleValue(): UserMode {
+        return _currentRole.value
+    }
+
     override suspend fun setCurrentRole(role: UserMode) {
+        _currentRole.value = role
+    }
+
+    fun setRoleDirectly(role: UserMode) {
         _currentRole.value = role
     }
 

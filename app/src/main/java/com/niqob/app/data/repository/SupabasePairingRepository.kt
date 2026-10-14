@@ -38,6 +38,7 @@ class SupabasePairingRepository(
         private const val KEY_STATUS = "status"
         private const val KEY_CONNECTED_AT = "connectedAt"
         private const val KEY_PAIRING_CODE = "pairingCode"
+        private const val KEY_ROLE = "userRole"
 
         @Volatile
         private var instance: SupabasePairingRepository? = null
@@ -69,13 +70,16 @@ class SupabasePairingRepository(
 
     private val localDeviceId: String = "parent_dev_${UUID.randomUUID().toString().take(8)}"
     private val _pairingSession = MutableStateFlow<PairingSession?>(restoreSession())
-    private val _currentRole = MutableStateFlow<UserMode>(UserMode.UNSELECTED)
+    private val _currentRole = MutableStateFlow<UserMode>(restoreRole())
 
     fun initPreferences(context: Context) {
         if (sharedPreferences == null) {
             sharedPreferences = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (_pairingSession.value == null) {
                 _pairingSession.value = restoreSession()
+            }
+            if (_currentRole.value == UserMode.UNSELECTED) {
+                _currentRole.value = restoreRole()
             }
         }
         if (credentialStore == null) {
@@ -157,6 +161,16 @@ class SupabasePairingRepository(
             familyId = familyId,
             connectedAt = connectedAt
         )
+    }
+
+    private fun restoreRole(): UserMode {
+        val prefs = sharedPreferences ?: return UserMode.UNSELECTED
+        val roleStr = prefs.getString(KEY_ROLE, null) ?: return UserMode.UNSELECTED
+        return try {
+            UserMode.valueOf(roleStr)
+        } catch (_: Exception) {
+            UserMode.UNSELECTED
+        }
     }
 
     override suspend fun createPairingCode(): Result<PairingSession> {
@@ -276,6 +290,8 @@ class SupabasePairingRepository(
             _pairingSession.value = session
             try {
                 persistSession(session)
+                _currentRole.value = UserMode.CHILD
+                sharedPreferences?.edit()?.putString(KEY_ROLE, UserMode.CHILD.name)?.apply()
             } catch (e: Exception) {
                 store.clear()
                 _pairingSession.value = null
@@ -338,12 +354,26 @@ class SupabasePairingRepository(
         return _currentRole.asStateFlow()
     }
 
+    override fun getCurrentRoleValue(): UserMode {
+        if (_currentRole.value != UserMode.UNSELECTED) {
+            return _currentRole.value
+        }
+        val restored = restoreRole()
+        if (restored != UserMode.UNSELECTED) {
+            _currentRole.value = restored
+        }
+        return _currentRole.value
+    }
+
     override suspend fun setCurrentRole(role: UserMode) {
         _currentRole.value = role
+        sharedPreferences?.edit()?.putString(KEY_ROLE, role.name)?.apply()
     }
 
     override suspend fun clearParentSession(): Result<Unit> {
         _pairingSession.value = null
+        _currentRole.value = UserMode.UNSELECTED
+        sharedPreferences?.edit()?.remove(KEY_ROLE)?.apply()
         return Result.Success(Unit)
     }
 

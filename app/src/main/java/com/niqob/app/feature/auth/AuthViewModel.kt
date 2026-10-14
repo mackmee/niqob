@@ -66,6 +66,9 @@ class AuthViewModel(
                 when (val result = loginUseCase(email, password)) {
                     is Result.Success -> {
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+                        try {
+                            com.niqob.app.data.repository.SupabasePairingRepository.getInstance().setCurrentRole(com.niqob.app.domain.model.UserMode.PARENT)
+                        } catch (_: Throwable) { }
                         onSuccess()
                     }
                     is Result.Error -> {

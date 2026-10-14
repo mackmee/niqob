@@ -12,6 +12,7 @@ interface PairingRepository {
     suspend fun revokePairing(): Result<Unit>
     fun getCurrentRole(): Flow<UserMode>
     suspend fun setCurrentRole(role: UserMode)
+    fun getCurrentRoleValue(): UserMode = UserMode.UNSELECTED
     suspend fun syncPairingSession(): Result<PairingSession?> = Result.Success(null)
     suspend fun clearParentSession(): Result<Unit> = Result.Success(Unit)
     fun getChildDeviceId(): String? = null

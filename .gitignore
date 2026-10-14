@@ -24,3 +24,6 @@ local.properties
 *supabase-keys*
 secrets/
 credentials/
+
+# Supabase CLI cache and temp files
+supabase/.temp/

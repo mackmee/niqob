@@ -257,35 +257,25 @@ class ChildUsageAndHeartbeatSecurityTest {
             return RpcExecutionResult(false, "INVALID_USAGE", "Total usage minutes must be non-negative.")
         }
 
-        if (callerUid == null) {
-            // Child caller: MUST verify secret BEFORE device lookup
-            val isKnown = deviceId in listOf(deviceAId, deviceBId, revokedDeviceId)
-            val storedHash = when (deviceId) {
-                deviceAId -> deviceASecretHash
-                deviceBId -> deviceBSecretHash
-                revokedDeviceId -> revokedDeviceSecretHash
-                else -> null
-            }
-            val pairingStatus = if (deviceId == revokedDeviceId) "REVOKED" else "CONNECTED"
+        // Step 7D Hardened Security Policy:
+        // Telemetry write strictly requires valid child device secret for EVERY caller.
+        // An authenticated parent JWT alone (callerUid != null) cannot authorize a telemetry write.
+        val isKnown = deviceId in listOf(deviceAId, deviceBId, revokedDeviceId)
+        val storedHash = when (deviceId) {
+            deviceAId -> deviceASecretHash
+            deviceBId -> deviceBSecretHash
+            revokedDeviceId -> revokedDeviceSecretHash
+            else -> null
+        }
+        val pairingStatus = if (deviceId == revokedDeviceId) "REVOKED" else "CONNECTED"
 
-            val auth = verifyChildDeviceSecret(deviceId, deviceSecret, storedHash, isKnown, pairingStatus)
-            if (!auth.authorized) {
-                return RpcExecutionResult(false, "UNAUTHORIZED", "Invalid device authorization.")
-            }
-        } else {
-            // Parent caller: checks family ownership
-            val deviceBelongsToFamilyA = deviceId in listOf(deviceAId, revokedDeviceId)
-            val deviceBelongsToFamilyB = deviceId == deviceBId
+        val auth = verifyChildDeviceSecret(deviceId, deviceSecret, storedHash, isKnown, pairingStatus)
+        if (!auth.authorized) {
+            return RpcExecutionResult(false, "UNAUTHORIZED", "Invalid device authorization.")
+        }
 
-            if (!deviceBelongsToFamilyA && !deviceBelongsToFamilyB) {
-                return RpcExecutionResult(false, "DEVICE_NOT_FOUND", "Device record not found.")
-            }
-
-            val parentOwnsDevice = (callerUid == parentAUid && deviceBelongsToFamilyA) ||
-                    (callerUid == parentBUid && deviceBelongsToFamilyB)
-            if (!parentOwnsDevice) {
-                return RpcExecutionResult(false, "UNAUTHORIZED", "You do not have permission to sync usage for this device.")
-            }
+        if (!isKnown) {
+            return RpcExecutionResult(false, "UNAUTHORIZED", "Invalid device authorization.")
         }
 
         val effectiveRemaining = maxOf(0, remainingMinutes ?: maxOf(0, 120 - totalUsageMinutes))
@@ -602,7 +592,8 @@ class ChildUsageAndHeartbeatSecurityTest {
     }
 
     @Test
-    fun upsertDailyUsage_authenticatedParent_validFamily_succeedsWithoutSecret() {
+    fun upsertDailyUsage_authenticatedParent_withoutChildSecret_failsUnauthorized() {
+        // Step 7D: A parent JWT alone (even for their own family's child) cannot authorize telemetry writes
         val result = simulateUpsertScreenTimeUsageDaily(
             callerUid = parentAUid,
             deviceId = deviceAId,
@@ -610,20 +601,37 @@ class ChildUsageAndHeartbeatSecurityTest {
             totalUsageMinutes = 90,
             deviceSecret = null
         )
-        assertTrue(result.success)
+        assertFalse("Parent JWT alone must not authorize telemetry write", result.success)
+        assertEquals("UNAUTHORIZED", result.errorCode)
+        assertEquals("Invalid device authorization.", result.message)
     }
 
     @Test
-    fun upsertDailyUsage_authenticatedParent_crossFamily_failsUnauthorized() {
+    fun upsertDailyUsage_authenticatedParent_withInvalidChildSecret_failsUnauthorized() {
         val result = simulateUpsertScreenTimeUsageDaily(
-            callerUid = parentBUid,
+            callerUid = parentAUid,
             deviceId = deviceAId,
             usageDate = "2026-10-11",
             totalUsageMinutes = 90,
-            deviceSecret = null
+            deviceSecret = "0000000000000000000000000000000000000000000000000000000000000000"
         )
-        assertFalse(result.success)
+        assertFalse("Parent caller with invalid child secret must be rejected", result.success)
         assertEquals("UNAUTHORIZED", result.errorCode)
+        assertEquals("Invalid device authorization.", result.message)
+    }
+
+    @Test
+    fun upsertDailyUsage_authenticatedParent_withRevokedChildSecret_failsUnauthorized() {
+        val result = simulateUpsertScreenTimeUsageDaily(
+            callerUid = parentAUid,
+            deviceId = revokedDeviceId,
+            usageDate = "2026-10-11",
+            totalUsageMinutes = 90,
+            deviceSecret = revokedDeviceSecret
+        )
+        assertFalse("Parent caller with revoked child secret must be rejected", result.success)
+        assertEquals("UNAUTHORIZED", result.errorCode)
+        assertEquals("Invalid device authorization.", result.message)
     }
 
     // ==========================================================================

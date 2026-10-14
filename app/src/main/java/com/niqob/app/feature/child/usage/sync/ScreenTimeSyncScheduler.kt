@@ -11,6 +11,14 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkRequest
+import com.niqob.app.data.local.ChildDeviceCredentialStore
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
+import com.niqob.app.data.repository.SupabasePairingRepository
+import com.niqob.app.domain.model.PairingSession
+import com.niqob.app.domain.model.PairingStatus
+import com.niqob.app.domain.model.UserMode
+import com.niqob.app.domain.repository.PairingRepository
+import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.TimeUnit
 
 data class SyncInfo(
@@ -40,6 +48,7 @@ object ScreenTimeSyncScheduler {
     const val SYNC_STATUS_FAILED = "FAILED"
     const val SYNC_STATUS_SKIPPED_NOT_PAIRED = "SKIPPED_NOT_PAIRED"
     const val SYNC_STATUS_SKIPPED_PERMISSION = "SKIPPED_PERMISSION"
+    const val SYNC_STATUS_SKIPPED_ROLE = "SKIPPED_ROLE"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -86,6 +95,59 @@ object ScreenTimeSyncScheduler {
         val appContext = context.applicationContext
         WorkManager.getInstance(appContext).cancelUniqueWork(UNIQUE_PERIODIC_WORK_NAME)
         getPrefs(appContext).edit().putBoolean(KEY_AUTO_SYNC_SCHEDULED, false).apply()
+    }
+
+    /**
+     * Checks whether the current device is reliably configured as an enrolled child device:
+     * 1. Has non-blank child device ID and device secret in secure credential store.
+     * 2. Current persisted role is UserMode.CHILD.
+     * 3. Connected pairing session exists and matches stored device ID.
+     */
+    fun isEnrolledChildDevice(
+        context: Context? = null,
+        pairingRepository: PairingRepository? = null,
+        credentialStore: ChildDeviceCredentialStore? = null
+    ): Boolean {
+        val credStore = credentialStore ?: (if (context != null) SharedPreferencesChildDeviceCredentialStore.getInstance(context) else null)
+        if (credStore == null || !credStore.hasCredential()) {
+            return false
+        }
+        val storedDeviceId = credStore.getDeviceId()
+        val storedSecret = credStore.getDeviceSecret()
+        if (storedDeviceId.isNullOrBlank() || storedSecret.isNullOrBlank()) {
+            return false
+        }
+
+        val pairingRepo = pairingRepository ?: (if (context != null) SupabasePairingRepository.getInstance(context) else null)
+            ?: return false
+        val role = pairingRepo.getCurrentRoleValue()
+        if (role != UserMode.CHILD) {
+            return false
+        }
+
+        val session = (pairingRepo.getPairingSession() as? StateFlow<PairingSession?>)?.value
+        if (session == null || session.status != PairingStatus.CONNECTED || session.childDeviceId != storedDeviceId) {
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * Reconciles background sync scheduling with current device enrollment status:
+     * Schedules periodic sync ONLY if the device is a properly enrolled child;
+     * Cancels any active periodic sync otherwise.
+     */
+    fun reconcileScheduling(
+        context: Context,
+        pairingRepository: PairingRepository? = null,
+        credentialStore: ChildDeviceCredentialStore? = null
+    ) {
+        if (isEnrolledChildDevice(context, pairingRepository, credentialStore)) {
+            schedule(context)
+        } else {
+            cancel(context)
+        }
     }
 
     /**

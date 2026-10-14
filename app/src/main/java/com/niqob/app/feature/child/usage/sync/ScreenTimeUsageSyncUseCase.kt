@@ -3,9 +3,11 @@ package com.niqob.app.feature.child.usage.sync
 import android.util.Log
 import com.niqob.app.core.common.ChildAuthorizationRevokedException
 import com.niqob.app.core.common.Result as NiqobResult
+import com.niqob.app.data.local.ChildDeviceCredentialStore
 import com.niqob.app.domain.calculator.DailyScreenTimeCalculator
 import com.niqob.app.domain.model.PairingSession
 import com.niqob.app.domain.model.PairingStatus
+import com.niqob.app.domain.model.UserMode
 import com.niqob.app.domain.repository.PairingRepository
 import com.niqob.app.domain.repository.ScreenTimeRepository
 import com.niqob.app.domain.repository.ScreenTimeUsageRepository
@@ -35,14 +37,26 @@ class ScreenTimeUsageSyncUseCase(
     private val screenTimeRepo: ScreenTimeRepository,
     private val pairingRepo: PairingRepository,
     private val screenTimeUsageRepo: ScreenTimeUsageRepository,
-    private val maxRetries: Int = 3
+    private val maxRetries: Int = 3,
+    private val credentialStore: ChildDeviceCredentialStore? = null
 ) {
     companion object {
         private const val TAG = "ScreenTimeSyncUseCase"
     }
 
     suspend fun executeSync(attemptCount: Int = 0): SyncExecutionResult {
-        // 1. Verify child device is paired
+        // 1. Verify device is in CHILD role before collecting or uploading usage
+        val currentRole = pairingRepo.getCurrentRoleValue().takeIf { it != UserMode.UNSELECTED }
+            ?: run {
+                val flow = pairingRepo.getCurrentRole()
+                if (flow is StateFlow<UserMode>) flow.value else UserMode.UNSELECTED
+            }
+        if (currentRole != UserMode.CHILD) {
+            Log.d(TAG, "Device role is $currentRole (expected CHILD). Skipping automatic sync.")
+            return SyncExecutionResult.Skipped(if (currentRole == UserMode.PARENT) "parent_mode" else "role_not_child")
+        }
+
+        // 2. Verify child device is paired as connected child
         val session: PairingSession? = try {
             val sessionFlow = pairingRepo.getPairingSession()
             if (sessionFlow is StateFlow<PairingSession?>) {
@@ -55,10 +69,30 @@ class ScreenTimeUsageSyncUseCase(
             null
         }
 
-        val childDeviceId = session?.childDeviceId
-        if (childDeviceId.isNullOrBlank() || session.status != PairingStatus.CONNECTED) {
+        val sessionChildDeviceId = session?.childDeviceId
+        if (sessionChildDeviceId.isNullOrBlank() || session.status != PairingStatus.CONNECTED) {
             Log.d(TAG, "Device is not paired as connected child. Skipping automatic sync.")
             return SyncExecutionResult.Skipped("not_paired")
+        }
+
+        // 3. Require nonblank child device secret and device ID from secure credential store
+        val storedSecret = credentialStore?.getDeviceSecret() ?: pairingRepo.getChildDeviceSecret()
+        if (storedSecret.isNullOrBlank()) {
+            Log.w(TAG, "Child device secret is missing or blank in secure credential store. Skipping sync.")
+            return SyncExecutionResult.Skipped("missing_child_credentials")
+        }
+
+        val storedDeviceId = credentialStore?.getDeviceId()
+            ?: (if (credentialStore == null) pairingRepo.getChildDeviceId() else null)
+        if (storedDeviceId.isNullOrBlank()) {
+            Log.w(TAG, "Stored child device ID is missing. Skipping sync.")
+            return SyncExecutionResult.Skipped("missing_child_credentials")
+        }
+
+        // 4. Verify stored child device ID matches connected pairing session's child device ID
+        if (storedDeviceId != sessionChildDeviceId) {
+            Log.w(TAG, "Stored device ID ($storedDeviceId) does not match pairing session childDeviceId ($sessionChildDeviceId). Skipping sync.")
+            return SyncExecutionResult.Skipped("device_id_mismatch")
         }
 
         // 2. Verify Usage Access permission is granted
@@ -92,7 +126,7 @@ class ScreenTimeUsageSyncUseCase(
         // 4. Query current server limit for child device
         var dailyLimitMinutes = 120
         var isLimitEnabled = true
-        when (val limitResult = screenTimeRepo.getScreenTimeLimit(childDeviceId)) {
+        when (val limitResult = screenTimeRepo.getScreenTimeLimit(storedDeviceId)) {
             is NiqobResult.Success -> {
                 dailyLimitMinutes = limitResult.data.dailyLimitMinutes
                 isLimitEnabled = limitResult.data.enabled
@@ -119,7 +153,7 @@ class ScreenTimeUsageSyncUseCase(
 
         // 6. Upload aggregate daily summary to Supabase
         val syncResult = screenTimeUsageRepo.upsertDailyUsage(
-            deviceId = childDeviceId,
+            deviceId = storedDeviceId,
             usageDate = usageSummary.date,
             totalUsageMinutes = calculatedStatus.usedMinutes,
             dailyLimitMinutes = calculatedStatus.dailyLimitMinutes,

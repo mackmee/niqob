@@ -82,6 +82,7 @@ class ChildAuthorizationRevocationSyncTest {
             familyId = "family-sec03"
         )
         fakePairingRepo.setSessionDirectly(session)
+        fakePairingRepo.setRoleDirectly(com.niqob.app.domain.model.UserMode.CHILD)
         fakePairingRepo.fakeChildDeviceId = deviceId
         fakePairingRepo.fakeChildDeviceSecret = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
         childCredentialStore.save(deviceId, "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")

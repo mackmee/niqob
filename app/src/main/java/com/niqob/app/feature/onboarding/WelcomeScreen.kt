@@ -39,6 +39,7 @@ fun WelcomeScreen(
     modifier: Modifier = Modifier,
     viewModel: WelcomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Surface(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -112,6 +113,7 @@ fun WelcomeScreen(
                 // Parent Button
                 Button(
                     onClick = {
+                        com.niqob.app.feature.child.usage.sync.ScreenTimeSyncScheduler.cancel(context)
                         viewModel.selectRole(com.niqob.app.domain.model.UserMode.PARENT) {
                             onSelectParent()
                         }

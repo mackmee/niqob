@@ -1,12 +1,15 @@
 package com.niqob.app
 
 import com.niqob.app.core.common.Result
+import com.niqob.app.data.local.NoOpDeviceSecretCipher
+import com.niqob.app.data.local.SharedPreferencesChildDeviceCredentialStore
 import com.niqob.app.domain.model.AppUsageInfo
 import com.niqob.app.domain.model.DailyUsageSummary
 import com.niqob.app.domain.model.PairingSession
 import com.niqob.app.domain.model.PairingStatus
 import com.niqob.app.domain.model.ScreenTimeDailyUsage
 import com.niqob.app.domain.model.ScreenTimeLimit
+import com.niqob.app.domain.model.UserMode
 import com.niqob.app.fakes.FakePairingRepository
 import com.niqob.app.fakes.FakeScreenTimeRepository
 import com.niqob.app.fakes.FakeScreenTimeUsageRepository
@@ -61,10 +64,16 @@ class ScreenTimeUsageSyncWorkerTest {
             familyId = "fam_1"
         )
         fakePairingRepo.setSessionDirectly(session)
+        fakePairingRepo.setRoleDirectly(UserMode.CHILD)
+        fakePairingRepo.fakeChildDeviceId = deviceId
+        fakePairingRepo.fakeChildDeviceSecret = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
     }
 
     @Test
     fun executeSync_whenChildNotPaired_skipsSyncGracefully() = runBlocking {
+        fakePairingRepo.setCurrentRole(UserMode.CHILD)
+        fakePairingRepo.fakeChildDeviceId = testDeviceId
+        fakePairingRepo.fakeChildDeviceSecret = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
         fakePairingRepo.setSessionDirectly(null)
 
         val outcome = syncUseCase.executeSync(attemptCount = 0)
@@ -76,6 +85,9 @@ class ScreenTimeUsageSyncWorkerTest {
 
     @Test
     fun executeSync_whenChildPairingPending_skipsSyncGracefully() = runBlocking {
+        fakePairingRepo.setCurrentRole(UserMode.CHILD)
+        fakePairingRepo.fakeChildDeviceId = testDeviceId
+        fakePairingRepo.fakeChildDeviceSecret = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
         val pendingSession = PairingSession(
             pairingId = "pair_sess_pending",
             parentDeviceId = "parent_dev_1",
@@ -92,6 +104,92 @@ class ScreenTimeUsageSyncWorkerTest {
 
         assertTrue(outcome is SyncExecutionResult.Skipped)
         assertEquals("not_paired", (outcome as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+    }
+
+    @Test
+    fun executeSync_whenParentMode_skipsWithoutQueryingUsageOrUpserting() = runBlocking {
+        setPairedChildSession()
+        fakePairingRepo.setCurrentRole(UserMode.PARENT)
+
+        val outcome = syncUseCase.executeSync(attemptCount = 0)
+
+        assertTrue(outcome is SyncExecutionResult.Skipped)
+        assertEquals("parent_mode", (outcome as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+    }
+
+    @Test
+    fun executeSync_whenRoleNotChild_skipsWithoutQueryingUsageOrUpserting() = runBlocking {
+        setPairedChildSession()
+        fakePairingRepo.setCurrentRole(UserMode.UNSELECTED)
+
+        val outcome = syncUseCase.executeSync(attemptCount = 0)
+
+        assertTrue(outcome is SyncExecutionResult.Skipped)
+        assertEquals("role_not_child", (outcome as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+    }
+
+    @Test
+    fun executeSync_whenChildSecretMissingOrBlank_skipsWithoutQueryingUsageOrUpserting() = runBlocking {
+        setPairedChildSession()
+        fakePairingRepo.fakeChildDeviceSecret = null
+
+        val outcomeNull = syncUseCase.executeSync(attemptCount = 0)
+
+        assertTrue(outcomeNull is SyncExecutionResult.Skipped)
+        assertEquals("missing_child_credentials", (outcomeNull as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+
+        // Blank secret
+        fakePairingRepo.fakeChildDeviceSecret = "   "
+        val outcomeBlank = syncUseCase.executeSync(attemptCount = 0)
+
+        assertTrue(outcomeBlank is SyncExecutionResult.Skipped)
+        assertEquals("missing_child_credentials", (outcomeBlank as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+    }
+
+    @Test
+    fun executeSync_whenChildDeviceIdMissing_skipsWithoutQueryingUsageOrUpserting() = runBlocking {
+        setPairedChildSession()
+        fakePairingRepo.fakeChildDeviceId = null
+        val inMemoryCredStore = SharedPreferencesChildDeviceCredentialStore(
+            sharedPreferences = null,
+            cipher = NoOpDeviceSecretCipher
+        )
+        val useCaseWithStore = ScreenTimeUsageSyncUseCase(
+            usageStatsRepo = fakeUsageStatsRepo,
+            screenTimeRepo = fakeScreenTimeRepo,
+            pairingRepo = fakePairingRepo,
+            screenTimeUsageRepo = fakeScreenTimeUsageRepo,
+            maxRetries = 3,
+            credentialStore = inMemoryCredStore
+        )
+
+        val outcome = useCaseWithStore.executeSync(attemptCount = 0)
+
+        assertTrue(outcome is SyncExecutionResult.Skipped)
+        assertEquals("missing_child_credentials", (outcome as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
+        assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
+    }
+
+    @Test
+    fun executeSync_whenDeviceIdMismatch_skipsWithoutQueryingUsageOrUpserting() = runBlocking {
+        setPairedChildSession(deviceId = "child_dev_session_1")
+        fakePairingRepo.fakeChildDeviceId = "child_dev_stored_2"
+
+        val outcome = syncUseCase.executeSync(attemptCount = 0)
+
+        assertTrue(outcome is SyncExecutionResult.Skipped)
+        assertEquals("device_id_mismatch", (outcome as SyncExecutionResult.Skipped).reason)
+        assertEquals(0, fakeUsageStatsRepo.getTodayUsageCallCount)
         assertEquals(0, fakeScreenTimeUsageRepo.upsertCount)
     }
 
@@ -287,6 +385,88 @@ class ScreenTimeUsageSyncWorkerTest {
         assertEquals("FAILED", ScreenTimeSyncScheduler.SYNC_STATUS_FAILED)
         assertEquals("SKIPPED_NOT_PAIRED", ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_NOT_PAIRED)
         assertEquals("SKIPPED_PERMISSION", ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_PERMISSION)
+        assertEquals("SKIPPED_ROLE", ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_ROLE)
+    }
+
+    @Test
+    fun isEnrolledChildDevice_evaluatesCorrectlyAcrossRolesAndCredentials() {
+        val inMemoryCredStore = SharedPreferencesChildDeviceCredentialStore(
+            sharedPreferences = null,
+            cipher = NoOpDeviceSecretCipher
+        )
+        fakePairingRepo.setRoleDirectly(UserMode.PARENT)
+        assertFalse(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+
+        // Child role, but no credentials in store
+        fakePairingRepo.setRoleDirectly(UserMode.CHILD)
+        assertFalse(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+
+        // Credentials saved and matching session
+        inMemoryCredStore.save(testDeviceId, "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+        setPairedChildSession(deviceId = testDeviceId)
+        assertTrue(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+
+        // Device ID mismatch between credential store and session
+        setPairedChildSession(deviceId = "different_device_id")
+        assertFalse(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+
+        // Session not connected (e.g. revoked)
+        val revokedSession = PairingSession(
+            pairingId = "pair_sess_1",
+            parentDeviceId = "parent_dev_1",
+            childDeviceId = testDeviceId,
+            pairingCode = "123456",
+            createdAt = System.currentTimeMillis(),
+            expiresAt = System.currentTimeMillis() + 600_000L,
+            status = PairingStatus.REVOKED,
+            familyId = "fam_1"
+        )
+        fakePairingRepo.setSessionDirectly(revokedSession)
+        assertFalse(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+    }
+
+    @Test
+    fun reconcileScheduling_whenParentMode_doesNotSchedulePeriodicSync_includingAfterAppRestart() {
+        val inMemoryCredStore = SharedPreferencesChildDeviceCredentialStore(
+            sharedPreferences = null,
+            cipher = NoOpDeviceSecretCipher
+        )
+
+        // 1. Initial parent mode selection
+        fakePairingRepo.setRoleDirectly(UserMode.PARENT)
+        assertFalse(ScreenTimeSyncScheduler.isEnrolledChildDevice(context = null, pairingRepository = fakePairingRepo, credentialStore = inMemoryCredStore))
+
+        // 2. Simulate app restart: persisted state is restored as PARENT role and empty child credentials
+        val restartedPairingRepo = FakePairingRepository().apply {
+            setRoleDirectly(UserMode.PARENT)
+            // Parent has pairing session from remote query, but no local child credentials
+            setSessionDirectly(
+                PairingSession(
+                    pairingId = "pair_sess_parent_view",
+                    parentDeviceId = "parent_dev_1",
+                    childDeviceId = "child_dev_123",
+                    pairingCode = "123456",
+                    createdAt = System.currentTimeMillis(),
+                    expiresAt = System.currentTimeMillis() + 600_000L,
+                    status = PairingStatus.CONNECTED,
+                    familyId = "fam_1"
+                )
+            )
+        }
+        val restartedCredStore = SharedPreferencesChildDeviceCredentialStore(
+            sharedPreferences = null,
+            cipher = NoOpDeviceSecretCipher
+        ) // Empty credentials on parent device
+
+        // Verification: isEnrolledChildDevice MUST return false on app restart for parent device
+        assertFalse(
+            "Parent device must NOT be considered an enrolled child device on app restart",
+            ScreenTimeSyncScheduler.isEnrolledChildDevice(
+                context = null,
+                pairingRepository = restartedPairingRepo,
+                credentialStore = restartedCredStore
+            )
+        )
     }
 
     @Test

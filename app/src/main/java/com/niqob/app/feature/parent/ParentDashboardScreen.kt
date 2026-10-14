@@ -86,6 +86,11 @@ fun ParentDashboardScreen(
     val session = uiState.pairingSession
     val isConnected = session?.status == PairingStatus.CONNECTED
     val user = uiState.user
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val handleLogout = {
+        com.niqob.app.feature.child.usage.sync.ScreenTimeSyncScheduler.cancel(context)
+        onLogout()
+    }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.refreshDashboard()
@@ -98,7 +103,7 @@ fun ParentDashboardScreen(
                 canNavigateBack = true,
                 onNavigateBack = onNavigateBack,
                 actions = {
-                    IconButton(onClick = { viewModel.logout(onLogout) }) {
+                    IconButton(onClick = { viewModel.logout(handleLogout) }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                             contentDescription = "Sign Out",
@@ -156,7 +161,7 @@ fun ParentDashboardScreen(
                             )
                         }
                         OutlinedButton(
-                            onClick = { viewModel.logout(onLogout) },
+                            onClick = { viewModel.logout(handleLogout) },
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text("Sign Out", style = MaterialTheme.typography.labelMedium)

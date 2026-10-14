@@ -47,7 +47,8 @@ class ScreenTimeUsageSyncWorker(
             usageStatsRepo = usageStatsRepository ?: AndroidUsageStatsRepository(AndroidUsageStatsDataSource(applicationContext)),
             screenTimeRepo = screenTimeRepository ?: SupabaseScreenTimeRepository(credentialStore = credStore),
             pairingRepo = pairingRepository ?: SupabasePairingRepository.getInstance(applicationContext),
-            screenTimeUsageRepo = screenTimeUsageRepository ?: SupabaseScreenTimeUsageRepository(credentialStore = credStore)
+            screenTimeUsageRepo = screenTimeUsageRepository ?: SupabaseScreenTimeUsageRepository(credentialStore = credStore),
+            credentialStore = credStore
         )
     }
 
@@ -72,10 +73,11 @@ class ScreenTimeUsageSyncWorker(
                 )
             }
             is SyncExecutionResult.Skipped -> {
-                val status = if (outcome.reason == "not_paired") {
-                    ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_NOT_PAIRED
-                } else {
-                    ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_PERMISSION
+                val status = when (outcome.reason) {
+                    "not_paired" -> ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_NOT_PAIRED
+                    "parent_mode", "role_not_child", "missing_child_credentials", "device_id_mismatch" ->
+                        ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_ROLE
+                    else -> ScreenTimeSyncScheduler.SYNC_STATUS_SKIPPED_PERMISSION
                 }
                 ScreenTimeSyncScheduler.recordSyncResult(
                     applicationContext,

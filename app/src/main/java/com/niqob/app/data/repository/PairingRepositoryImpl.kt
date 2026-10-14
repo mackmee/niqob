@@ -53,6 +53,10 @@ class PairingRepositoryImpl(
         return localPairingDataSource.currentRole
     }
 
+    override fun getCurrentRoleValue(): UserMode {
+        return localPairingDataSource.getCurrentRoleValue()
+    }
+
     override suspend fun setCurrentRole(role: UserMode) {
         localPairingDataSource.setCurrentRole(role)
         localGeneralDataSource?.setUserMode(role)

@@ -54,6 +54,11 @@ fun ChildPairingScreen(
     viewModel: ChildPairingViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val handlePairingSuccess = {
+        com.niqob.app.feature.child.usage.sync.ScreenTimeSyncScheduler.schedule(context)
+        onPairingSuccess()
+    }
 
     Scaffold(
         topBar = {
@@ -165,7 +170,7 @@ fun ChildPairingScreen(
                 SixDigitInputBox(
                     code = uiState.codeInput,
                     onCodeChanged = { viewModel.onCodeChanged(it) },
-                    onDone = { viewModel.connectToParent(onPairingSuccess) }
+                    onDone = { viewModel.connectToParent(handlePairingSuccess) }
                 )
 
                 if (uiState.errorMessage != null) {
@@ -181,7 +186,7 @@ fun ChildPairingScreen(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 Button(
-                    onClick = { viewModel.connectToParent(onPairingSuccess) },
+                    onClick = { viewModel.connectToParent(handlePairingSuccess) },
                     enabled = uiState.codeInput.length == 6 && !uiState.isLoading,
                     modifier = Modifier
                         .fillMaxWidth()

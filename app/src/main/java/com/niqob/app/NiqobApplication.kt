@@ -12,17 +12,21 @@ class NiqobApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // Initialize child device credential store with application context
-        SharedPreferencesChildDeviceCredentialStore.getInstance(applicationContext)
+        val credStore = SharedPreferencesChildDeviceCredentialStore.getInstance(applicationContext)
 
         // Initialize pairing repository with application context
-        SupabasePairingRepository.getInstance(applicationContext)
+        val pairingRepo = SupabasePairingRepository.getInstance(applicationContext)
 
         // Initialize persistent parent override store with application context
         val overrideStore = SharedPreferencesParentOverrideSessionStore.getInstance(applicationContext)
         LocalScreenTimeEnforcementRepository.getInstance(overrideStore)
 
-        // Schedule periodic screen time usage sync worker (every 15 minutes)
-        // Uses ExistingPeriodicWorkPolicy.KEEP to guarantee a unique, non-duplicated background job.
-        ScreenTimeSyncScheduler.schedule(applicationContext)
+        // Only schedule periodic screen time usage sync if the device is reliably an enrolled child;
+        // otherwise cancel any existing scheduled sync job to prevent parent-mode or un-enrolled telemetry leakage.
+        ScreenTimeSyncScheduler.reconcileScheduling(
+            context = applicationContext,
+            pairingRepository = pairingRepo,
+            credentialStore = credStore
+        )
     }
 }

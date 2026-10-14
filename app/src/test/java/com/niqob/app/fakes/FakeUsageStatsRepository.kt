@@ -9,7 +9,8 @@ class FakeUsageStatsRepository(
     var permissionGranted: Boolean = true,
     var mockUsageSummary: DailyUsageSummary? = null,
     var shouldFail: Boolean = false,
-    var failureException: Exception = Exception("Simulated FakeUsageStatsRepository failure")
+    var failureException: Exception = Exception("Simulated FakeUsageStatsRepository failure"),
+    var getTodayUsageCallCount: Int = 0
 ) : UsageStatsRepository {
 
     override fun hasUsageAccessPermission(): Boolean {
@@ -17,6 +18,7 @@ class FakeUsageStatsRepository(
     }
 
     override suspend fun getTodayUsage(excludeSelf: Boolean): Result<DailyUsageSummary> {
+        getTodayUsageCallCount++
         if (shouldFail) return Result.Error(failureException)
         if (!permissionGranted) {
             return Result.Error(SecurityException("Usage access permission not granted"))
