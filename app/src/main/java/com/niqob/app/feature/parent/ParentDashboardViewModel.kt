@@ -105,7 +105,8 @@ class ParentDashboardViewModel(
             }
             viewModelScope.launch {
                 getChildDeviceStatusUseCase().collect { status ->
-                    if (!_uiState.value.childStatus.isConnected) {
+                    val isConnected = ((pairingRepository.getPairingSession() as? StateFlow)?.value ?: _uiState.value.pairingSession)?.status == PairingStatus.CONNECTED
+                    if (isConnected && !_uiState.value.childStatus.isConnected) {
                         _uiState.value = _uiState.value.copy(
                             childStatus = status,
                             isLoading = false
@@ -120,24 +121,30 @@ class ParentDashboardViewModel(
             }
             viewModelScope.launch {
                 deviceRepository.getDevicesForFamily("").collect { devices ->
-                    val childDevice = devices.firstOrNull { it.deviceType == "CHILD_PHONE" } ?: devices.firstOrNull()
-                    if (childDevice != null) {
-                        val lastSeen = childDevice.lastSeenAt
-                        val connectivity = deviceRepository.calculateDeviceConnectivity(lastSeen)
-                        _uiState.value = _uiState.value.copy(
-                            connectivityStatus = connectivity,
-                            lastSeenAt = lastSeen,
-                            childDeviceId = childDevice.id,
-                            childStatus = ChildDeviceStatus(
-                                isConnected = true,
-                                deviceName = childDevice.deviceName.ifBlank { "Child Device" },
-                                screenTimeMinutes = _uiState.value.screenTimeLimitMinutes,
-                                allowedAppsCount = _uiState.value.childStatus.allowedAppsCount,
-                                safetyAlertsCount = _uiState.value.childStatus.safetyAlertsCount
+                    val currentSession = (pairingRepository.getPairingSession() as? StateFlow)?.value ?: _uiState.value.pairingSession
+                    val isConnected = currentSession?.status == PairingStatus.CONNECTED
+                    if (isConnected) {
+                        val childDevice = devices.firstOrNull { it.id == currentSession?.childDeviceId }
+                            ?: devices.firstOrNull { it.deviceType == "CHILD_PHONE" }
+                            ?: devices.firstOrNull()
+                        if (childDevice != null) {
+                            val lastSeen = childDevice.lastSeenAt
+                            val connectivity = deviceRepository.calculateDeviceConnectivity(lastSeen)
+                            _uiState.value = _uiState.value.copy(
+                                connectivityStatus = connectivity,
+                                lastSeenAt = lastSeen,
+                                childDeviceId = childDevice.id,
+                                childStatus = ChildDeviceStatus(
+                                    isConnected = true,
+                                    deviceName = childDevice.deviceName.ifBlank { "Child Device" },
+                                    screenTimeMinutes = _uiState.value.screenTimeLimitMinutes,
+                                    allowedAppsCount = _uiState.value.childStatus.allowedAppsCount,
+                                    safetyAlertsCount = _uiState.value.childStatus.safetyAlertsCount
+                                )
                             )
-                        )
-                        loadScreenTimeLimitInternal(childDevice.id)
-                        loadTodayUsageInternal(childDevice.id)
+                            loadScreenTimeLimitInternal(childDevice.id)
+                            loadTodayUsageInternal(childDevice.id)
+                        }
                     }
                 }
             }
@@ -154,31 +161,26 @@ class ParentDashboardViewModel(
             pairingRepository.syncPairingSession()
             val deviceResult = deviceRepository.fetchDevices()
             val devices: List<Device> = (deviceResult as? Result.Success<List<Device>>)?.data ?: emptyList()
-            val childDevice = devices.firstOrNull { it.deviceType == "CHILD_PHONE" } ?: devices.firstOrNull()
 
             val session = (pairingRepository.getPairingSession() as? StateFlow)?.value
-            val isConnected = session?.status == PairingStatus.CONNECTED || childDevice != null
-            val resolvedChildDeviceId = childDevice?.id ?: session?.childDeviceId
 
-            if (isConnected) {
-                val lastSeen = childDevice?.lastSeenAt ?: (session?.connectedAt ?: session?.createdAt ?: System.currentTimeMillis())
+            if (session != null && session.status == PairingStatus.CONNECTED) {
+                val childDevice = devices.firstOrNull { it.id == session.childDeviceId }
+                    ?: devices.firstOrNull { it.deviceType == "CHILD_PHONE" }
+                    ?: devices.firstOrNull()
+                val resolvedChildDeviceId = session.childDeviceId ?: childDevice?.id
+
+                val lastSeen = childDevice?.lastSeenAt ?: (session.connectedAt ?: session.createdAt ?: System.currentTimeMillis())
                 val connectivity = deviceRepository.calculateDeviceConnectivity(lastSeen)
-                val deviceName = childDevice?.deviceName ?: (session?.childDeviceId ?: "Child Device")
+                val deviceName = childDevice?.deviceName ?: (session.childDeviceId ?: "Child Device")
 
-                val effectiveSession = session?.copy(
-                    status = PairingStatus.CONNECTED,
-                    childDeviceId = session.childDeviceId ?: childDevice?.id
-                ) ?: PairingSession(
-                    pairingId = childDevice?.id ?: "connected_session",
-                    parentDeviceId = "parent_cloud",
-                    childDeviceId = childDevice?.id,
-                    pairingCode = "",
-                    createdAt = childDevice?.lastSeenAt ?: System.currentTimeMillis(),
-                    expiresAt = System.currentTimeMillis() + 10 * 60 * 1000L,
-                    status = PairingStatus.CONNECTED,
-                    familyId = childDevice?.familyId,
-                    connectedAt = childDevice?.lastSeenAt
-                )
+                val effectiveSession = if (session.childDeviceId != null) {
+                    session
+                } else if (childDevice?.id != null) {
+                    session.copy(childDeviceId = childDevice.id)
+                } else {
+                    session
+                }
 
                 _uiState.value = _uiState.value.copy(
                     pairingSession = effectiveSession,
@@ -201,9 +203,9 @@ class ParentDashboardViewModel(
                 }
             } else {
                 _uiState.value = _uiState.value.copy(
-                    pairingSession = null,
+                    pairingSession = session,
                     connectivityStatus = DeviceConnectivityStatus.OFFLINE,
-                    childDeviceId = null,
+                    childDeviceId = session?.childDeviceId,
                     childStatus = ChildDeviceStatus(
                         isConnected = false,
                         deviceName = "Not connected",
@@ -243,9 +245,15 @@ class ParentDashboardViewModel(
             lastSeenAt = if (isConnected) lastSeen else _uiState.value.lastSeenAt,
             childDeviceId = resolvedChildDeviceId,
             childStatus = if (isConnected) {
+                val currentName = _uiState.value.childStatus.deviceName
+                val resolvedDeviceName = if (currentName.isNotBlank() && currentName != "Not connected") {
+                    currentName
+                } else {
+                    session?.childDeviceId ?: "Child Device"
+                }
                 ChildDeviceStatus(
                     isConnected = true,
-                    deviceName = session?.childDeviceId ?: "Child Device",
+                    deviceName = resolvedDeviceName,
                     screenTimeMinutes = _uiState.value.screenTimeLimitMinutes,
                     allowedAppsCount = _uiState.value.childStatus.allowedAppsCount,
                     safetyAlertsCount = _uiState.value.childStatus.safetyAlertsCount
